@@ -1,0 +1,27 @@
+{
+  "name": "max-forwarder-userbot",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@stylistic/eslint-plugin": "^5.6.1",
+    "@eslint/js": "^10.0.1",
+    "@types/bun": "^1.1.6",
+    "eslint": "^9.39.1",
+    "eslint-plugin-sort": "^4.0.0",
+    "simple-git-hooks": "^2.13.1",
+    "typescript-eslint": "^8.47.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "scripts": {
+    "run": "bun ./src/index.ts",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "bun run lint"
+  },
+  "dependencies": {}
+}
