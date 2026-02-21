@@ -23,5 +23,8 @@
   "simple-git-hooks": {
     "pre-commit": "bun run lint"
   },
-  "dependencies": {}
+  "dependencies": {},
+  "patchedDependencies": {
+    "simple-git-hooks@2.13.1": "patches/simple-git-hooks@2.13.1.patch"
+  }
 }

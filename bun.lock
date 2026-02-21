@@ -4,10 +4,8 @@
   "workspaces": {
     "": {
       "name": "max-forwarder-userbot",
-      "dependencies": {
-        "@eslint/js": "^10.0.1",
-      },
       "devDependencies": {
+        "@eslint/js": "^10.0.1",
         "@stylistic/eslint-plugin": "^5.6.1",
         "@types/bun": "^1.1.6",
         "eslint": "^9.39.1",
@@ -19,6 +17,9 @@
         "typescript": "^5",
       },
     },
+  },
+  "patchedDependencies": {
+    "simple-git-hooks@2.13.1": "patches/simple-git-hooks@2.13.1.patch",
   },
   "packages": {
     "@eslint-community/eslint-utils": ["@eslint-community/eslint-utils@4.9.1", "", { "dependencies": { "eslint-visitor-keys": "^3.4.3" }, "peerDependencies": { "eslint": "^6.0.0 || ^7.0.0 || >=8.0.0" } }, "sha512-phrYmNiYppR7znFEdqgfWHXR6NCkZEK7hwWDHZUjit/2/U0r6XvkDl0SYnoM51Hq7FhCGdLDT6zxCCOY1hexsQ=="],

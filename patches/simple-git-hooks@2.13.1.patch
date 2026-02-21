@@ -1,0 +1,15 @@
+https://github.com/oven-sh/bun/issues/21754
+--- a/simple-git-hooks.js
++++ b/simple-git-hooks.js
+@@ -101,6 +101,11 @@ function getProjectRootDirectoryFromNodeModules(projectPath) {
+         return projDir.slice(0, indexOfDenoDir - 1).join('/');
+     }
+ 
++    const indexOfBunDir = projDir.indexOf('.bun')
++    if (indexOfBunDir > -1) {
++        return projDir.slice(0, indexOfBunDir - 1).join('/');
++    }
++
+     const indexOfStoreDir = projDir.indexOf('.store')
+     if (indexOfStoreDir > -1) {
+         return projDir.slice(0, indexOfStoreDir - 1).join('/');
