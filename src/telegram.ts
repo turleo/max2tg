@@ -108,23 +108,23 @@ async function sendDocumentMessageToTelegram(attach: Attaches, to: TelegramForwa
   })
 }
 
-function sendMessageToTelegram(message: StalledMessage, to: TelegramForwardOption) {
+async function sendMessageToTelegram(message: StalledMessage, to: TelegramForwardOption) {
   const attaches: Attaches[] = [...message.message.attaches, ...(message.message.link?.message.attaches ?? []), ...message.downloadedAttaches]
   for (const attach of attaches) {
     if (attach._type === "PHOTO") {
-      sendPhotoMessageToTelegram(attach, to).catch(console.error)
+      await sendPhotoMessageToTelegram(attach, to)
     }
     else if (attach._type === "VIDEO") {
-      sendVideoMessageToTelegram(attach, to).catch(console.error)
+      await sendVideoMessageToTelegram(attach, to)
     }
     else if (attach._type === "FILE") {
-      sendDocumentMessageToTelegram(attach, to).catch(console.error)
+      await sendDocumentMessageToTelegram(attach, to)
     }
     else {
       console.error(`Unknown attach type: ${attach._type}`)
     }
   }
-  sendTextMessageToTelegram(message.message, to, message.from ?? DEFAULT_CONTACT_NAME).catch(console.error)
+  await sendTextMessageToTelegram(message.message, to, message.from ?? DEFAULT_CONTACT_NAME)
 }
 
 export function handleMessage(message: StalledMessage): StalledMessage | null {
@@ -133,7 +133,7 @@ export function handleMessage(message: StalledMessage): StalledMessage | null {
   }
   for (const forward of config.forward) {
     if (forward.from === message.chatId) {
-      sendMessageToTelegram(message, forward.to)
+      sendMessageToTelegram(message, forward.to).catch(console.error)
     }
   }
   return null
