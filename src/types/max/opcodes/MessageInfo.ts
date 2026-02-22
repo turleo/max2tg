@@ -28,5 +28,9 @@ export interface Message {
 
 export interface Attaches {
   _type: string
-  baseUrl?: string
+  baseUrl: string
+  url?: string
+  videoId?: number
+  fileId?: number
+  name?: string
 }

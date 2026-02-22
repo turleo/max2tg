@@ -1,17 +1,19 @@
+/* eslint-disable max-lines-per-function */
 import { randomUUIDv7 } from "bun"
 import config from "./config"
-import { DEFAULT_CONTACT_NAME } from "./consts"
 import { handleMessage } from "./telegram"
 import type Message from "./types/max/Message"
 import type { allOpcodes, InputsMap, OutputsMap } from "./types/max/opcodes"
+import type { DownloadDocumentOutput } from "./types/max/opcodes/DownloadDocument"
+import type { DownloadVideoOutput } from "./types/max/opcodes/DownloadVideo"
 import type { LoginInput } from "./types/max/opcodes/Login"
-import type { MessageInfoOutput } from "./types/max/opcodes/MessageInfo"
-import { OPCODE_CHAT_UPDATE, OPCODE_HANDSHAKE, OPCODE_HEARTBEAT, OPCODE_INCOMING_MESSAGE, OPCODE_LOGIN, OPCODE_NOOP, OPCODE_USER_INFO } from "./types/max/opcodes/opcodes"
+import type { Attaches, MessageInfoOutput } from "./types/max/opcodes/MessageInfo"
+import { OPCODE_CHAT_UPDATE, OPCODE_DOWNLOAD_DOCUMENT, OPCODE_DOWNLOAD_VIDEO, OPCODE_HANDSHAKE, OPCODE_HEARTBEAT, OPCODE_INCOMING_MESSAGE, OPCODE_LOGIN, OPCODE_NOOP, OPCODE_USER_INFO } from "./types/max/opcodes/opcodes"
 import type { UserInfoOutput } from "./types/max/opcodes/UserInfo"
+import type { StalledMessage } from "./types/messages"
 
 const contacts: Record<number, string> = {}
-let stalledMessage: MessageInfoOutput["message"] | null = null
-let stalledMessageChatId: number | null = null
+let stalledMessage: StalledMessage | null = null
 
 function createAuthMessage(): [LoginInput, typeof OPCODE_LOGIN] {
   if (!config.maxToken) {
@@ -28,8 +30,47 @@ function createAuthMessage(): [LoginInput, typeof OPCODE_LOGIN] {
   }, OPCODE_LOGIN]
 }
 
+/* eslint-disable no-underscore-dangle */
+function downloadAttachments(message: MessageInfoOutput["message"], chatId: number): NextMessageOutput {
+  const attachments: Attaches[] = [...message.attaches, ...(message.link?.message.attaches ?? [])]
+  const answer: NextMessageOutput = []
+  for (const attachment of attachments) {
+    if (attachment._type === "VIDEO") {
+      answer.push([{
+        chatId,
+        messageId: message.id,
+        videoId: attachment.videoId,
+      }, OPCODE_DOWNLOAD_VIDEO])
+    }
+    else if (attachment._type === "FILE") {
+      answer.push([{
+        chatId,
+        fileId: attachment.fileId,
+        messageId: message.id,
+      }, OPCODE_DOWNLOAD_DOCUMENT])
+    }
+  }
+  return answer
+}
+
+function getVideoUrl(video: DownloadVideoOutput): string {
+  const urlKeys = Object.keys(video).filter(key => key.startsWith("MP4_"))
+  return video[urlKeys[0] ?? ""] ?? ""
+}
+
+function unwrapMessage(message: MessageInfoOutput["message"], chatId: number): StalledMessage {
+  return {
+    chatId,
+    downloadedAttaches: [],
+    from: contacts[message.sender] ?? "Кто-то",
+    message,
+    requestsLeft: 0,
+  }
+}
+
 type NextMessageOutput = [InputsMap[typeof allOpcodes[number]], typeof allOpcodes[number]][]
 
+// eslint-disable-next-line max-statements
 export function nextMessage<O extends typeof allOpcodes[number]>(message: Message<O>): NextMessageOutput {
   // eslint-disable-next-line prefer-destructuring
   const payload: OutputsMap[O] = message.payload
@@ -45,30 +86,45 @@ export function nextMessage<O extends typeof allOpcodes[number]>(message: Messag
       return [[undefined, OPCODE_NOOP]]
     case OPCODE_INCOMING_MESSAGE:
       const { message: incomingMessage } = payload as MessageInfoOutput
-      const answer: NextMessageOutput = [[{
+      let answer: NextMessageOutput = [[{
         chatId: (payload as MessageInfoOutput).chatId,
         messageId: incomingMessage.id,
       }, OPCODE_INCOMING_MESSAGE]]
-      if (Object.keys(contacts).includes(incomingMessage.sender.toString())) {
-        handleMessage(incomingMessage, (payload as MessageInfoOutput).chatId, contacts[incomingMessage.sender] ?? DEFAULT_CONTACT_NAME)
-      }
-      else {
-        stalledMessage = incomingMessage
-        stalledMessageChatId = (payload as MessageInfoOutput).chatId
+      answer = answer.concat(downloadAttachments(incomingMessage, (payload as MessageInfoOutput).chatId))
+      stalledMessage = unwrapMessage(incomingMessage, (payload as MessageInfoOutput).chatId)
+      if (!Object.keys(contacts).includes(incomingMessage.sender.toString())) {
         answer.push([{
           contactIds: [incomingMessage.sender],
         }, OPCODE_USER_INFO])
       }
+      // -1 for the incoming message itself
+      stalledMessage.requestsLeft += answer.length - 1
+      stalledMessage = handleMessage(stalledMessage)
       return answer
     case OPCODE_LOGIN:
+      return [[undefined, OPCODE_NOOP]]
+    case OPCODE_DOWNLOAD_VIDEO:
+      if (stalledMessage) {
+        stalledMessage.requestsLeft -= 1
+        stalledMessage.downloadedAttaches.push({ _type: "VIDEO", baseUrl: getVideoUrl(payload as DownloadVideoOutput) })
+        stalledMessage = handleMessage(stalledMessage)
+      }
+      return [[undefined, OPCODE_NOOP]]
+    case OPCODE_DOWNLOAD_DOCUMENT:
+      if (stalledMessage) {
+        stalledMessage.requestsLeft -= 1
+        stalledMessage.downloadedAttaches.push({ _type: "FILE", baseUrl: (payload as DownloadDocumentOutput).url })
+        stalledMessage = handleMessage(stalledMessage)
+      }
       return [[undefined, OPCODE_NOOP]]
     case OPCODE_USER_INFO:
       (payload as UserInfoOutput).contacts.forEach((contact) => {
         contacts[contact.id] = contact.names.map(name => `${name.firstName ?? ""} ${name.lastName ?? ""}`.trim()).join(", ")
       })
       if (stalledMessage) {
-        handleMessage(stalledMessage, stalledMessageChatId ?? 0, contacts[stalledMessage.sender] ?? "Кто-то")
-        stalledMessage = null
+        stalledMessage.from = contacts[stalledMessage.message.sender] ?? "Кто-то"
+        stalledMessage.requestsLeft -= 1
+        stalledMessage = handleMessage(stalledMessage)
       }
       return [[undefined, OPCODE_NOOP]]
     case OPCODE_CHAT_UPDATE:

@@ -1,17 +1,30 @@
 /* eslint-disable no-underscore-dangle */
+/* eslint-disable camelcase */
 import config from "./config"
-import { DEFAULT_CHAT_NAME } from "./consts"
+import { DEFAULT_CHAT_NAME, DEFAULT_CONTACT_NAME } from "./consts"
 import type { TelegramForwardOption } from "./types/config"
 import type { Attaches, Message } from "./types/max/opcodes/MessageInfo"
+import type { StalledMessage } from "./types/messages"
 
+function attachToString(attach: Attaches): string {
+  switch (attach._type) {
+    case "PHOTO":
+      return "📷"
+    case "VIDEO":
+      return "🎥"
+    case "FILE":
+      return `📄 ${attach.name ?? ""}`
+    default:
+      return attach._type
+  }
+}
 function formatMessage(message: Message, from: string): string {
   if (message.link) {
     return `💁‍♂️ ${from} ➡️${message.link.chatName ?? DEFAULT_CHAT_NAME}:\n\n${message.link.message.text}\n${message.link.message.attaches.map(attach => attach._type).join("\n")}`
   }
-  return `**${from}**:\n${message.text}\n\n${message.attaches.map(attach => attach._type).join("\n")}`
+  return `**${from}**:\n${message.text}\n\n${message.attaches.map(attachToString).join("\n")}`
 }
 
-/* eslint-disable camelcase */
 async function sendTextMessageToTelegram(message: Message, to: TelegramForwardOption, from: string): Promise<void> {
   await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendMessage`, {
     body: JSON.stringify({
@@ -41,19 +54,87 @@ async function sendPhotoMessageToTelegram(attach: Attaches, to: TelegramForwardO
   })
 }
 
-export function handleMessage(message: Message, chatId: number, from: string) {
-  const attaches = message.link ? message.link.message.attaches : message.attaches
-  for (const forward of config.forward) {
-    if (forward.from === chatId) {
-      for (const attach of attaches) {
-        if (attach._type === "PHOTO") {
-          sendPhotoMessageToTelegram(attach, forward.to).catch(console.error)
-        }
-        else {
-          console.error(`Unknown attach type: ${attach._type}`)
-        }
-      }
-      sendTextMessageToTelegram(message, forward.to, from).catch(console.error)
+async function sendVideoMessageToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
+  const videoLink = attach.baseUrl
+  if (!videoLink) {
+    return
+  }
+  const file = await fetch(videoLink, { headers: {
+    "User-Agent": config.userAgent.headerUserAgent,
+  } },
+  )
+  const formData = new FormData()
+  formData.append("chat_id", to.chatId.toString())
+  formData.append("video", await file.blob(), "file.mp4")
+  if (to.threadId) {
+    formData.append("thread_id", to.threadId.toString())
+  }
+  await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendVideo`, {
+    body: formData,
+    method: "POST",
+  })
+}
+
+const DEFAULT_FILENAME = "file.bin"
+function getFilenameFromContentDisposition(header: string | null): string {
+  if (!header) {
+    return DEFAULT_FILENAME
+  }
+  const match = /filename\*?=utf-8''(?<filename>[^;]+)/iu.exec(header)
+  if (!match) {
+    return DEFAULT_FILENAME
+  }
+  return match.groups?.filename?.trim() ?? DEFAULT_FILENAME
+}
+
+async function sendDocumentMessageToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
+  const documentLink = attach.baseUrl
+  if (!documentLink) {
+    return
+  }
+  const file = await fetch(documentLink, { headers: {
+    "User-Agent": config.userAgent.headerUserAgent,
+  } },
+  )
+  const formData = new FormData()
+  formData.append("chat_id", to.chatId.toString())
+  formData.append("document", await file.blob(), getFilenameFromContentDisposition(file.headers.get("Content-Disposition")))
+  if (to.threadId) {
+    formData.append("thread_id", to.threadId.toString())
+  }
+  await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendDocument`, {
+    body: formData,
+    method: "POST",
+  })
+}
+
+function sendMessageToTelegram(message: StalledMessage, to: TelegramForwardOption) {
+  const attaches: Attaches[] = [...message.message.attaches, ...(message.message.link?.message.attaches ?? []), ...message.downloadedAttaches]
+  for (const attach of attaches) {
+    if (attach._type === "PHOTO") {
+      sendPhotoMessageToTelegram(attach, to).catch(console.error)
+    }
+    else if (attach._type === "VIDEO") {
+      sendVideoMessageToTelegram(attach, to).catch(console.error)
+    }
+    else if (attach._type === "FILE") {
+      sendDocumentMessageToTelegram(attach, to).catch(console.error)
+    }
+    else {
+      console.error(`Unknown attach type: ${attach._type}`)
     }
   }
+  sendTextMessageToTelegram(message.message, to, message.from ?? DEFAULT_CONTACT_NAME).catch(console.error)
+}
+
+export function handleMessage(message: StalledMessage): StalledMessage | null {
+  if (message.requestsLeft > 0) {
+    return message
+  }
+  for (const forward of config.forward) {
+    if (forward.from === message.chatId) {
+      sendMessageToTelegram(message, forward.to)
+    }
+  }
+  return null
 }

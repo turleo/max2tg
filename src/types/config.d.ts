@@ -9,7 +9,7 @@ declare module "config.toml" {
 
 export interface TelegramForwardOption {
   chatId: string | number
-  threadId: number
+  threadId?: number
 }
 
 export default interface Config {
