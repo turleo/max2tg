@@ -16,7 +16,7 @@
     "typescript": "^5"
   },
   "scripts": {
-    "run": "bun ./src/index.ts",
+    "run": "bun src/index.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit"
