@@ -60,3 +60,8 @@ ws.addEventListener("message", (event) => {
     ws.send(JSON.stringify(message))
   })
 })
+
+ws.addEventListener("close", () => {
+  console.warn("WebSocket closed, exiting")
+  process.exit()
+})
