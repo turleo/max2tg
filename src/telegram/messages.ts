@@ -1,13 +1,11 @@
-/* eslint-disable no-underscore-dangle */
-/* eslint-disable camelcase */
-import config from "./config"
-import { DEFAULT_CONTACT_NAME } from "./consts"
-import { formatMessage } from "./telegram/formatting"
-import type { TelegramForwardOption } from "./types/config"
-import type { Attaches, Message } from "./types/max/opcodes/MessageInfo"
-import type { StalledMessage } from "./types/messages"
+import config from "../config"
+import { DEFAULT_CONTACT_NAME, DEFAULT_FILENAME } from "../consts"
+import type { TelegramForwardOption } from "../types/config"
+import type { Attaches, Message } from "../types/max/opcodes/IncomingMessage"
+import type { StalledMessage } from "../types/messages"
+import { formatMessage } from "./formatting"
 
-async function sendTextMessageToTelegram(message: Message, to: TelegramForwardOption, from: string): Promise<void> {
+async function sendTextToTelegram(message: Message, to: TelegramForwardOption, from: string): Promise<void> {
   await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendMessage`, {
     body: JSON.stringify({
       chat_id: to.chatId,
@@ -21,7 +19,7 @@ async function sendTextMessageToTelegram(message: Message, to: TelegramForwardOp
   })
 }
 
-async function sendPhotoMessageToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
+async function sendPhotoToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
   const photoLink = attach.baseUrl
   await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendPhoto`, {
     body: JSON.stringify({
@@ -36,7 +34,7 @@ async function sendPhotoMessageToTelegram(attach: Attaches, to: TelegramForwardO
   })
 }
 
-async function sendVideoMessageToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
+async function sendVideoToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
   const videoLink = attach.baseUrl
   if (!videoLink) {
     return
@@ -57,7 +55,6 @@ async function sendVideoMessageToTelegram(attach: Attaches, to: TelegramForwardO
   })
 }
 
-const DEFAULT_FILENAME = "file.bin"
 function getFilenameFromContentDisposition(header: string | null): string {
   if (!header) {
     return DEFAULT_FILENAME
@@ -69,7 +66,7 @@ function getFilenameFromContentDisposition(header: string | null): string {
   return match.groups?.filename?.trim() ?? DEFAULT_FILENAME
 }
 
-async function sendDocumentMessageToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
+async function sendDocumentToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
   const documentLink = attach.baseUrl
   if (!documentLink) {
     return
@@ -93,20 +90,21 @@ async function sendDocumentMessageToTelegram(attach: Attaches, to: TelegramForwa
 async function sendMessageToTelegram(message: StalledMessage, to: TelegramForwardOption) {
   const attaches: Attaches[] = [...message.message.attaches, ...(message.message.link?.message.attaches ?? []), ...message.downloadedAttaches]
   for (const attach of attaches) {
-    if (attach._type === "PHOTO") {
-      await sendPhotoMessageToTelegram(attach, to)
-    }
-    else if (attach._type === "VIDEO") {
-      await sendVideoMessageToTelegram(attach, to)
-    }
-    else if (attach._type === "FILE") {
-      await sendDocumentMessageToTelegram(attach, to)
-    }
-    else {
-      console.error(`Unknown attach type: ${attach._type}`)
+    switch (attach._type) {
+      case "PHOTO":
+        await sendPhotoToTelegram(attach, to)
+        break
+      case "VIDEO":
+        await sendVideoToTelegram(attach, to)
+        break
+      case "FILE":
+        await sendDocumentToTelegram(attach, to)
+        break
+      default:
+        console.error(`Unknown attach type: ${attach._type}`)
     }
   }
-  await sendTextMessageToTelegram(message.message, to, message.from ?? DEFAULT_CONTACT_NAME)
+  await sendTextToTelegram(message.message, to, message.from ?? DEFAULT_CONTACT_NAME)
 }
 
 export function handleMessage(message: StalledMessage): StalledMessage | null {

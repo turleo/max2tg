@@ -1,14 +1,14 @@
 /* eslint-disable max-lines-per-function */
 import { randomUUIDv7 } from "bun"
 import config from "./config"
-import { handleMessage } from "./telegram"
+import { handleMessage } from "./telegram/messages"
 import type Message from "./types/max/Message"
 import type { allOpcodes, InputsMap, OutputsMap } from "./types/max/opcodes"
 import type { DownloadDocumentOutput } from "./types/max/opcodes/DownloadDocument"
 import type { DownloadVideoOutput } from "./types/max/opcodes/DownloadVideo"
+import type { Attaches, IncomingMessageOutput } from "./types/max/opcodes/IncomingMessage"
 import type { LoginInput } from "./types/max/opcodes/Login"
-import type { Attaches, MessageInfoOutput } from "./types/max/opcodes/MessageInfo"
-import { OPCODE_CHAT_UPDATE, OPCODE_DOWNLOAD_DOCUMENT, OPCODE_DOWNLOAD_VIDEO, OPCODE_HANDSHAKE, OPCODE_HEARTBEAT, OPCODE_INCOMING_MESSAGE, OPCODE_LOGIN, OPCODE_NOOP, OPCODE_USER_INFO } from "./types/max/opcodes/opcodes"
+import { OPCODE_CHAT_UPDATE, OPCODE_CLIENT_INFO, OPCODE_DOWNLOAD_DOCUMENT, OPCODE_DOWNLOAD_VIDEO, OPCODE_HANDSHAKE, OPCODE_HEARTBEAT, OPCODE_INCOMING_MESSAGE, OPCODE_LOGIN, OPCODE_NOOP, OPCODE_PRESENCE_UPDATE, OPCODE_USER_INFO } from "./types/max/opcodes/opcodes"
 import type { UserInfoOutput } from "./types/max/opcodes/UserInfo"
 import type { StalledMessage } from "./types/messages"
 
@@ -30,8 +30,7 @@ function createAuthMessage(): [LoginInput, typeof OPCODE_LOGIN] {
   }, OPCODE_LOGIN]
 }
 
-/* eslint-disable no-underscore-dangle */
-function downloadAttachments(message: MessageInfoOutput["message"], chatId: number): NextMessageOutput {
+function downloadAttachments(message: IncomingMessageOutput["message"], chatId: number): NextMessageOutput {
   const attachments: Attaches[] = [...message.attaches, ...(message.link?.message.attaches ?? [])]
   const answer: NextMessageOutput = []
   for (const attachment of attachments) {
@@ -58,7 +57,7 @@ function getVideoUrl(video: DownloadVideoOutput): string {
   return video[urlKeys[0] ?? ""] ?? ""
 }
 
-function unwrapMessage(message: MessageInfoOutput["message"], chatId: number): StalledMessage {
+function unwrapMessage(message: IncomingMessageOutput["message"], chatId: number): StalledMessage {
   return {
     chatId,
     downloadedAttaches: [],
@@ -66,6 +65,11 @@ function unwrapMessage(message: MessageInfoOutput["message"], chatId: number): S
     message,
     requestsLeft: 0,
   }
+}
+
+const opcodeToAttachmentType: Partial<Record<typeof allOpcodes[number], Attaches["_type"]>> = {
+  [OPCODE_DOWNLOAD_VIDEO]: "VIDEO",
+  [OPCODE_DOWNLOAD_DOCUMENT]: "FILE",
 }
 
 type NextMessageOutput = [InputsMap[typeof allOpcodes[number]], typeof allOpcodes[number]][]
@@ -82,16 +86,14 @@ export function nextMessage<O extends typeof allOpcodes[number]>(message: Messag
       }, OPCODE_HANDSHAKE]]
     case OPCODE_HANDSHAKE:
       return [createAuthMessage()]
-    case OPCODE_HEARTBEAT:
-      return [[undefined, OPCODE_NOOP]]
     case OPCODE_INCOMING_MESSAGE:
-      const { message: incomingMessage } = payload as MessageInfoOutput
+      const { message: incomingMessage } = payload as IncomingMessageOutput
       let answer: NextMessageOutput = [[{
-        chatId: (payload as MessageInfoOutput).chatId,
+        chatId: (payload as IncomingMessageOutput).chatId,
         messageId: incomingMessage.id,
       }, OPCODE_INCOMING_MESSAGE]]
-      answer = answer.concat(downloadAttachments(incomingMessage, (payload as MessageInfoOutput).chatId))
-      stalledMessage = unwrapMessage(incomingMessage, (payload as MessageInfoOutput).chatId)
+      answer = answer.concat(downloadAttachments(incomingMessage, (payload as IncomingMessageOutput).chatId))
+      stalledMessage = unwrapMessage(incomingMessage, (payload as IncomingMessageOutput).chatId)
       if (!Object.keys(contacts).includes(incomingMessage.sender.toString())) {
         answer.push([{
           contactIds: [incomingMessage.sender],
@@ -101,19 +103,17 @@ export function nextMessage<O extends typeof allOpcodes[number]>(message: Messag
       stalledMessage.requestsLeft += answer.length - 1
       stalledMessage = handleMessage(stalledMessage)
       return answer
-    case OPCODE_LOGIN:
-      return [[undefined, OPCODE_NOOP]]
     case OPCODE_DOWNLOAD_VIDEO:
       if (stalledMessage) {
         stalledMessage.requestsLeft -= 1
-        stalledMessage.downloadedAttaches.push({ _type: "VIDEO", baseUrl: getVideoUrl(payload as DownloadVideoOutput) })
+        stalledMessage.downloadedAttaches.push({ _type: opcodeToAttachmentType[message.opcode], baseUrl: getVideoUrl(payload as DownloadVideoOutput) })
         stalledMessage = handleMessage(stalledMessage)
       }
       return [[undefined, OPCODE_NOOP]]
     case OPCODE_DOWNLOAD_DOCUMENT:
       if (stalledMessage) {
         stalledMessage.requestsLeft -= 1
-        stalledMessage.downloadedAttaches.push({ _type: "FILE", baseUrl: (payload as DownloadDocumentOutput).url })
+        stalledMessage.downloadedAttaches.push({ _type: opcodeToAttachmentType[message.opcode], baseUrl: (payload as DownloadDocumentOutput).url })
         stalledMessage = handleMessage(stalledMessage)
       }
       return [[undefined, OPCODE_NOOP]]
@@ -127,7 +127,11 @@ export function nextMessage<O extends typeof allOpcodes[number]>(message: Messag
         stalledMessage = handleMessage(stalledMessage)
       }
       return [[undefined, OPCODE_NOOP]]
+    case OPCODE_HEARTBEAT:
+    case OPCODE_LOGIN:
     case OPCODE_CHAT_UPDATE:
+    case OPCODE_PRESENCE_UPDATE:
+    case OPCODE_CLIENT_INFO:
       return [[undefined, OPCODE_NOOP]]
     default:
       console.error(`Unknown opcode: ${message.opcode.toString()}`)

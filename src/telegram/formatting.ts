@@ -1,6 +1,5 @@
-/* eslint-disable no-underscore-dangle */
 import { DEFAULT_CHAT_NAME } from "../consts"
-import type { Attaches, Element as MaxFormatting, Message } from "../types/max/opcodes/MessageInfo"
+import type { Attaches, Element as MaxFormatting, Message } from "../types/max/opcodes/IncomingMessage"
 import type { Formatting as TelegramFormatting, TelegramMessage } from "../types/telegram"
 
 function attachToString(attach: Attaches): string {
@@ -46,10 +45,12 @@ function formatFormatting(formatting: MaxFormatting[], titleLength: number): Tel
 }
 
 function formatTitle(message: Message, from: string): string {
+  let title = `💁‍♂️ ${from}\n\n`
   if (message.link) {
-    return `💁‍♂️ ${from} ➡️${message.link.chatName ?? DEFAULT_CHAT_NAME}\n\n`
+    title += `➡️${message.link.chatName ?? DEFAULT_CHAT_NAME}`
   }
-  return `**${from}**\n\n`
+  title += "\n\n"
+  return title
 }
 
 export function formatMessage(message: Message, from: string): TelegramMessage {

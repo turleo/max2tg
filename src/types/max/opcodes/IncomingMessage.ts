@@ -1,11 +1,46 @@
-import type { ChatId, UserId } from "../common"
-
-export interface IncomingMessageOutput {
-  setAsUnread: boolean
-  chatId: ChatId
-  userId: UserId
-  unread: number
-  mark: number
+export interface IncomingMessageInput {
+  chatId: number
+  messageId: string
 }
 
-export type IncomingMessageInput = undefined
+export interface IncomingMessageOutput {
+  chatId: number
+  unread: number
+  message: Message
+  ttl: boolean
+  mark: number
+  prevMessageId: string
+}
+
+export interface Message {
+  sender: number
+  id: string
+  time: number
+  text: string
+  type: string
+  cid: number
+  elements?: Element[]
+  attaches: Attaches[]
+  link?: {
+    chatName?: string
+    message: Message
+  }
+}
+
+export interface Element {
+  type: string
+  from?: number
+  length: number
+  attributes?: {
+    url?: string
+  }
+}
+
+export interface Attaches {
+  _type: string
+  baseUrl: string
+  url?: string
+  videoId?: number
+  fileId?: number
+  name?: string
+}
