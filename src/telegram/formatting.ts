@@ -10,6 +10,8 @@ function attachToString(attach: Attaches): string {
       return "🎥"
     case "FILE":
       return `📄 ${attach.name ?? ""}`
+    case "STICKER":
+      return "🗒️"
     default:
       return attach._type
   }

@@ -67,11 +67,6 @@ function unwrapMessage(message: IncomingMessageOutput["message"], chatId: number
   }
 }
 
-const opcodeToAttachmentType: Partial<Record<typeof allOpcodes[number], Attaches["_type"]>> = {
-  [OPCODE_DOWNLOAD_VIDEO]: "VIDEO",
-  [OPCODE_DOWNLOAD_DOCUMENT]: "FILE",
-}
-
 type NextMessageOutput = [InputsMap[typeof allOpcodes[number]], typeof allOpcodes[number]][]
 
 // eslint-disable-next-line max-statements
@@ -106,14 +101,14 @@ export function nextMessage<O extends typeof allOpcodes[number]>(message: Messag
     case OPCODE_DOWNLOAD_VIDEO:
       if (stalledMessage) {
         stalledMessage.requestsLeft -= 1
-        stalledMessage.downloadedAttaches.push({ _type: opcodeToAttachmentType[message.opcode], baseUrl: getVideoUrl(payload as DownloadVideoOutput) })
+        stalledMessage.downloadedAttaches.push({ _type: "VIDEO", baseUrl: getVideoUrl(payload as DownloadVideoOutput) })
         stalledMessage = handleMessage(stalledMessage)
       }
       return [[undefined, OPCODE_NOOP]]
     case OPCODE_DOWNLOAD_DOCUMENT:
       if (stalledMessage) {
         stalledMessage.requestsLeft -= 1
-        stalledMessage.downloadedAttaches.push({ _type: opcodeToAttachmentType[message.opcode], baseUrl: (payload as DownloadDocumentOutput).url })
+        stalledMessage.downloadedAttaches.push({ _type: "FILE", baseUrl: (payload as DownloadDocumentOutput).url })
         stalledMessage = handleMessage(stalledMessage)
       }
       return [[undefined, OPCODE_NOOP]]

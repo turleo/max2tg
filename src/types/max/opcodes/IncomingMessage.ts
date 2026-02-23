@@ -39,6 +39,8 @@ export interface Element {
 export interface Attaches {
   _type: string
   baseUrl: string
+  lottieUrl?: string
+  stickerType?: string
   url?: string
   videoId?: number
   fileId?: number

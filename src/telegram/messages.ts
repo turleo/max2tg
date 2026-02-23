@@ -1,9 +1,11 @@
 import config from "../config"
-import { DEFAULT_CONTACT_NAME, DEFAULT_FILENAME } from "../consts"
+import { DEFAULT_CONTACT_NAME } from "../consts"
 import type { TelegramForwardOption } from "../types/config"
 import type { Attaches, Message } from "../types/max/opcodes/IncomingMessage"
 import type { StalledMessage } from "../types/messages"
+import { getDocumentForm } from "./documents"
 import { formatMessage } from "./formatting"
+import { getStickerForm } from "./stickers"
 
 async function sendTextToTelegram(message: Message, to: TelegramForwardOption, from: string): Promise<void> {
   await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendMessage`, {
@@ -39,9 +41,11 @@ async function sendVideoToTelegram(attach: Attaches, to: TelegramForwardOption):
   if (!videoLink) {
     return
   }
-  const file = await fetch(videoLink, { headers: {
-    "User-Agent": config.userAgent.headerUserAgent,
-  } },
+  const file = await fetch(videoLink, {
+    headers: {
+      "User-Agent": config.userAgent.headerUserAgent,
+    },
+  },
   )
   const formData = new FormData()
   formData.append("chat_id", to.chatId.toString())
@@ -55,29 +59,31 @@ async function sendVideoToTelegram(attach: Attaches, to: TelegramForwardOption):
   })
 }
 
-function getFilenameFromContentDisposition(header: string | null): string {
-  if (!header) {
-    return DEFAULT_FILENAME
+async function sendStickerToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
+  const stickerInfo = await getStickerForm(attach)
+  if (!stickerInfo) {
+    return
   }
-  const match = /filename\*?=utf-8''(?<filename>[^;]+)/iu.exec(header)
-  if (!match) {
-    return DEFAULT_FILENAME
+  const formData = new FormData()
+  formData.append("chat_id", to.chatId.toString())
+  formData.append(...stickerInfo)
+  if (to.threadId) {
+    formData.append("thread_id", to.threadId.toString())
   }
-  return match.groups?.filename?.trim() ?? DEFAULT_FILENAME
+  await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendSticker`, {
+    body: formData,
+    method: "POST",
+  })
 }
 
 async function sendDocumentToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
-  const documentLink = attach.baseUrl
-  if (!documentLink) {
+  const documentInfo = await getDocumentForm("document", attach)
+  if (!documentInfo) {
     return
   }
-  const file = await fetch(documentLink, { headers: {
-    "User-Agent": config.userAgent.headerUserAgent,
-  } },
-  )
   const formData = new FormData()
   formData.append("chat_id", to.chatId.toString())
-  formData.append("document", await file.blob(), getFilenameFromContentDisposition(file.headers.get("Content-Disposition")))
+  formData.append(...documentInfo)
   if (to.threadId) {
     formData.append("thread_id", to.threadId.toString())
   }
@@ -99,6 +105,9 @@ async function sendMessageToTelegram(message: StalledMessage, to: TelegramForwar
         break
       case "FILE":
         await sendDocumentToTelegram(attach, to)
+        break
+      case "STICKER":
+        await sendStickerToTelegram(attach, to)
         break
       default:
         console.error(`Unknown attach type: ${attach._type}`)
