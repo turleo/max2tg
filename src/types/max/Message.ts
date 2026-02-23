@@ -6,5 +6,4 @@ export default interface Message<O extends typeof allOpcodes[number]> {
   seq: number
   opcode: O
   payload: OutputsMap[O]
-
 }

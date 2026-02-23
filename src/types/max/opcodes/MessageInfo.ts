@@ -19,10 +19,20 @@ export interface Message {
   text: string
   type: string
   cid: number
+  elements?: Element[]
   attaches: Attaches[]
   link?: {
     chatName?: string
     message: Message
+  }
+}
+
+export interface Element {
+  type: string
+  from?: number
+  length: number
+  attributes?: {
+    url?: string
   }
 }
 

@@ -1,36 +1,18 @@
 /* eslint-disable no-underscore-dangle */
 /* eslint-disable camelcase */
 import config from "./config"
-import { DEFAULT_CHAT_NAME, DEFAULT_CONTACT_NAME } from "./consts"
+import { DEFAULT_CONTACT_NAME } from "./consts"
+import { formatMessage } from "./telegram/formatting"
 import type { TelegramForwardOption } from "./types/config"
 import type { Attaches, Message } from "./types/max/opcodes/MessageInfo"
 import type { StalledMessage } from "./types/messages"
-
-function attachToString(attach: Attaches): string {
-  switch (attach._type) {
-    case "PHOTO":
-      return "📷"
-    case "VIDEO":
-      return "🎥"
-    case "FILE":
-      return `📄 ${attach.name ?? ""}`
-    default:
-      return attach._type
-  }
-}
-function formatMessage(message: Message, from: string): string {
-  if (message.link) {
-    return `💁‍♂️ ${from} ➡️${message.link.chatName ?? DEFAULT_CHAT_NAME}:\n\n${message.link.message.text}\n${message.link.message.attaches.map(attach => attach._type).join("\n")}`
-  }
-  return `**${from}**:\n${message.text}\n\n${message.attaches.map(attachToString).join("\n")}`
-}
 
 async function sendTextMessageToTelegram(message: Message, to: TelegramForwardOption, from: string): Promise<void> {
   await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendMessage`, {
     body: JSON.stringify({
       chat_id: to.chatId,
-      text: formatMessage(message, from),
       thread_id: to.threadId,
+      ...formatMessage(message, from),
     }),
     headers: {
       "Content-Type": "application/json",
