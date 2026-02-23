@@ -47,7 +47,7 @@ function formatFormatting(formatting: MaxFormatting[], titleLength: number): Tel
 }
 
 function formatTitle(message: Message, from: string): string {
-  let title = `💁‍♂️ ${from}\n\n`
+  let title = `💁‍♂️ ${from}`
   if (message.link) {
     title += `➡️${message.link.chatName ?? DEFAULT_CHAT_NAME}`
   }
@@ -59,10 +59,13 @@ export function formatMessage(message: Message, from: string): TelegramMessage {
   const title = formatTitle(message, from)
   const defaultMessage = message.link?.message ?? message
   const formatting = formatFormatting(defaultMessage.elements ?? [], title.length)
-  const messageText = defaultMessage.text
+  let messageText = defaultMessage.text
+  if (messageText) {
+    messageText = `${messageText}\n\n`
+  }
   const attaches = defaultMessage.attaches.map(attachToString).join(",")
   return {
     entities: formatting,
-    text: `${title}${messageText}\n\n${attaches}`,
+    text: `${title}${messageText}${attaches}`,
   }
 }
