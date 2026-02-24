@@ -16,6 +16,8 @@ function attachToString(attach: Attaches): string {
       return "📍"
     case "CONTACT":
       return `📞 ${attach.name ?? ""}`
+    case "AUDIO":
+      return "🎤"
     default:
       return attach._type
   }

@@ -37,19 +37,14 @@ async function sendPhotoToTelegram(attach: Attaches, to: TelegramForwardOption):
 }
 
 async function sendVideoToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
-  const videoLink = attach.baseUrl
-  if (!videoLink) {
+  const videoInfo = await getDocumentForm("video", attach)
+  if (!videoInfo) {
     return
   }
-  const file = await fetch(videoLink, {
-    headers: {
-      "User-Agent": config.userAgent.headerUserAgent,
-    },
-  },
-  )
+  const [_videoType, videoBlob, videoFilename] = videoInfo
   const formData = new FormData()
   formData.append("chat_id", to.chatId.toString())
-  formData.append("video", await file.blob(), "file.mp4")
+  formData.append("video", videoBlob, `${videoFilename ?? "video"}.mp4`)
   if (to.threadId) {
     formData.append("thread_id", to.threadId.toString())
   }
@@ -123,6 +118,23 @@ async function sendContactToTelegram(attach: Attaches, to: TelegramForwardOption
   })
 }
 
+async function sendVoiceToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
+  const voiceInfo = await getDocumentForm("voice", attach)
+  if (!voiceInfo) {
+    return
+  }
+  const formData = new FormData()
+  formData.append("chat_id", to.chatId.toString())
+  formData.append(...voiceInfo)
+  if (to.threadId) {
+    formData.append("thread_id", to.threadId.toString())
+  }
+  await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendVoice`, {
+    body: formData,
+    method: "POST",
+  })
+}
+
 async function sendMessageToTelegram(message: StalledMessage, to: TelegramForwardOption) {
   const attaches: Attaches[] = [...message.message.attaches, ...(message.message.link?.message.attaches ?? []), ...message.downloadedAttaches]
   for (const attach of attaches) {
@@ -144,6 +156,9 @@ async function sendMessageToTelegram(message: StalledMessage, to: TelegramForwar
         break
       case "CONTACT":
         await sendContactToTelegram(attach, to)
+        break
+      case "AUDIO":
+        await sendVoiceToTelegram(attach, to)
         break
       default:
         console.error(`Unknown attach type: ${attach._type}`)
