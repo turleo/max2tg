@@ -63,7 +63,7 @@ function formatTitle(message: Message, from: string): string {
 
 export function formatMessage(message: Message, from: string): TelegramMessage {
   const title = formatTitle(message, from)
-  const defaultMessage = message.link?.message ?? message
+  const defaultMessage = message.link?.type === "FORWARD" ? message.link.message : message
   const formatting = formatFormatting(defaultMessage.elements ?? [], title.length)
   let messageText = defaultMessage.text
   if (messageText) {

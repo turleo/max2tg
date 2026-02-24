@@ -22,6 +22,7 @@ export interface Message {
   elements?: Element[]
   attaches: Attaches[]
   link?: {
+    type: string
     chatName?: string
     message: Message
   }
