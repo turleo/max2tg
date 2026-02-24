@@ -89,7 +89,7 @@ export function nextMessage<O extends typeof allOpcodes[number]>(message: Messag
       }, OPCODE_INCOMING_MESSAGE]]
       answer = answer.concat(downloadAttachments(incomingMessage, (payload as IncomingMessageOutput).chatId))
       stalledMessage = unwrapMessage(incomingMessage, (payload as IncomingMessageOutput).chatId)
-      if (!Object.keys(contacts).includes(incomingMessage.sender.toString())) {
+      if (incomingMessage.sender && !Object.keys(contacts).includes(incomingMessage.sender.toString())) {
         answer.push([{
           contactIds: [incomingMessage.sender],
         }, OPCODE_USER_INFO])
