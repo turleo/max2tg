@@ -54,8 +54,11 @@ function formatFormatting(formatting: MaxFormatting[], titleLength: number): Tel
 
 function formatTitle(message: Message, from: string): string {
   let title = `💁‍♂️ ${from}`
-  if (message.link) {
-    title += `➡️${message.link.chatName ?? DEFAULT_CHAT_NAME}`
+  if (message.link?.type === "FORWARD") {
+    title += `➡️ ${message.link.chatName ?? DEFAULT_CHAT_NAME}`
+  }
+  else if (message.link?.type === "REPLY") {
+    title += `↩️`
   }
   title += "\n\n"
   return title
