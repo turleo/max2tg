@@ -45,4 +45,10 @@ export interface Attaches {
   videoId?: number
   fileId?: number
   name?: string
+  latitude?: number
+  longitude?: number
+  zoom?: number
+  phoneNumber?: string
+  firstName?: string
+  lastName?: string
 }

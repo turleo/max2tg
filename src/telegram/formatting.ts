@@ -12,6 +12,10 @@ function attachToString(attach: Attaches): string {
       return `📄 ${attach.name ?? ""}`
     case "STICKER":
       return "🗒️"
+    case "LOCATION":
+      return "📍"
+    case "CONTACT":
+      return `📞 ${attach.name ?? ""}`
     default:
       return attach._type
   }
