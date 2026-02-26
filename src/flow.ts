@@ -7,13 +7,41 @@ import type { allOpcodes, InputsMap, OutputsMap } from "./types/max/opcodes"
 import type { DownloadDocumentOutput } from "./types/max/opcodes/DownloadDocument"
 import type { DownloadVideoOutput } from "./types/max/opcodes/DownloadVideo"
 import type { Attaches, IncomingMessageOutput } from "./types/max/opcodes/IncomingMessage"
-import type { LoginInput } from "./types/max/opcodes/Login"
+import type { Chat, LoginInput, LoginOutput } from "./types/max/opcodes/Login"
 import { OPCODE_CHAT_UPDATE, OPCODE_CLIENT_INFO, OPCODE_DOWNLOAD_DOCUMENT, OPCODE_DOWNLOAD_VIDEO, OPCODE_HANDSHAKE, OPCODE_HEARTBEAT, OPCODE_INCOMING_MESSAGE, OPCODE_LOGIN, OPCODE_NOOP, OPCODE_PRESENCE_UPDATE, OPCODE_USER_INFO } from "./types/max/opcodes/opcodes"
 import type { UserInfoOutput } from "./types/max/opcodes/UserInfo"
 import type { StalledMessage } from "./types/messages"
 
 const contacts: Record<number, string> = {}
 let stalledMessage: StalledMessage | null = null
+
+function getChatName(chat: Chat): string {
+  if (chat.title) {
+    return chat.title
+  }
+  if (chat.type === "DIALOG") {
+    if (chat.id === 0) {
+      return "Избранное"
+    }
+    return `Диалог (ID: ${chat.id.toString()})`
+  }
+  return `Чат (ID: ${chat.id.toString()})`
+}
+
+function isChatMonitored(chat: Chat): boolean {
+  const monitoredIds = new Set(config.forward.map(f => f.from))
+  return monitoredIds.has(chat.id) || (chat.cid !== undefined && monitoredIds.has(chat.cid))
+}
+
+function logMonitoredChats(chats: Chat[]): void {
+  const monitoredChats = chats.filter(isChatMonitored)
+  console.info("Monitoring:")
+  for (const chat of monitoredChats) {
+    const chatName = getChatName(chat)
+    const chatType = chat.type === "CHANNEL" ? "📢" : chat.type === "CHAT" ? "👥" : "💬"
+    console.info(`${chatType} ${chatName}`)
+  }
+}
 
 function createAuthMessage(): [LoginInput, typeof OPCODE_LOGIN] {
   if (!config.maxToken) {
@@ -122,8 +150,10 @@ export function nextMessage<O extends typeof allOpcodes[number]>(message: Messag
         stalledMessage = handleMessage(stalledMessage)
       }
       return [[undefined, OPCODE_NOOP]]
-    case OPCODE_HEARTBEAT:
     case OPCODE_LOGIN:
+      logMonitoredChats((payload as LoginOutput).chats)
+      return [[undefined, OPCODE_NOOP]]
+    case OPCODE_HEARTBEAT:
     case OPCODE_CHAT_UPDATE:
     case OPCODE_PRESENCE_UPDATE:
     case OPCODE_CLIENT_INFO:

@@ -26,6 +26,7 @@ function startHeartbeat() {
 }
 
 ws.addEventListener("open", () => {
+  console.info("Websocket opened")
   ws.send(JSON.stringify({
     cmd: 0,
     opcode: OPCODE_HANDSHAKE,
@@ -36,6 +37,8 @@ ws.addEventListener("open", () => {
     seq: 0,
     ver: 11,
   }))
+
+  console.info("Start heartbeat")
   startHeartbeat()
 })
 
