@@ -18,6 +18,8 @@ function attachToString(attach: Attaches): string {
       return `📞 ${attach.name ?? ""}`
     case "AUDIO":
       return "🎤"
+    case "CONTROL":
+      return `ℹ️ ${attach.event ?? JSON.stringify(attach)}`
     default:
       return attach._type
   }

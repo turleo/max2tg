@@ -39,6 +39,7 @@ export interface Element {
 
 export interface Attaches {
   _type: string
+  event?: string
   baseUrl: string
   lottieUrl?: string
   stickerType?: string
