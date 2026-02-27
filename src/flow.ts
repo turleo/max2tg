@@ -29,7 +29,7 @@ function getChatName(chat: Chat): string {
 }
 
 function isChatMonitored(chat: Chat): boolean {
-  const monitoredIds = new Set(config.forward.map(f => f.from))
+  const monitoredIds = new Set(config.forward.map(forward => forward.from))
   return monitoredIds.has(chat.id) || (chat.cid !== undefined && monitoredIds.has(chat.cid))
 }
 
@@ -38,7 +38,13 @@ function logMonitoredChats(chats: Chat[]): void {
   console.info("Monitoring:")
   for (const chat of monitoredChats) {
     const chatName = getChatName(chat)
-    const chatType = chat.type === "CHANNEL" ? "📢" : chat.type === "CHAT" ? "👥" : "💬"
+    let chatType = "💬"
+    if (chat.type === "CHANNEL") {
+      chatType = "📢"
+    }
+    else if (chat.type === "CHAT") {
+      chatType = "👥"
+    }
     console.info(`${chatType} ${chatName}`)
   }
 }

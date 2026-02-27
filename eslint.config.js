@@ -31,7 +31,7 @@ export default [
       "func-style": ["error", "declaration"],
       "no-await-in-loop": "off",
       "no-case-declarations": "off",
-      "no-console": ["error", { allow: ["warn", "error"] }],
+      "no-console": ["error", { allow: ["warn", "error", "info"] }],
       "no-magic-numbers": ["error", { ignore: [0, 1], ignoreArrayIndexes: true }],
       "no-ternary": "off",
       "no-undefined": "off",
