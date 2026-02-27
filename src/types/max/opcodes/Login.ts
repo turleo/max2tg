@@ -39,7 +39,7 @@ interface Name {
   type: string
 }
 
-interface Chat {
+export interface Chat {
   owner: number
   joinTime: number
   created: number
@@ -47,7 +47,7 @@ interface Chat {
   type: string
   lastFireDelayedErrorTime: number
   lastDelayedUpdateTime: number
-  prevMessageId: string
+  prevMessageId?: string
   modified: number
   lastEventTime: number
   id: number
@@ -58,6 +58,11 @@ interface Chat {
   newMessages?: number
   options?: Options
   cid?: number
+  title?: string
+  description?: string
+  participantsCount?: number
+  access?: string
+  link?: string
 }
 
 interface LastMessage {
