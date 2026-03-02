@@ -43,25 +43,35 @@ ws.addEventListener("open", () => {
 })
 
 ws.addEventListener("message", (event) => {
-  const incomingMessage = JSON.parse(event.data as string) as Message<typeof allOpcodes[number]>
-  const messages = nextMessage(incomingMessage)
-  messages.forEach(([payload, opcode]) => {
-    if (opcode === OPCODE_NOOP) {
-      return
-    }
-    let cmd = 0
-    if (incomingMessage.opcode === opcode) {
-      cmd = 1
-    }
-    const message = {
-      cmd,
-      opcode,
-      payload,
-      seq: incomingMessage.seq,
-      ver: 11,
-    }
-    ws.send(JSON.stringify(message))
-  })
+  try {
+    const incomingMessage = JSON.parse(event.data as string) as Message<typeof allOpcodes[number]>
+    const messages = nextMessage(incomingMessage)
+    messages.forEach(([payload, opcode]) => {
+      if (opcode === OPCODE_NOOP) {
+        return
+      }
+      let cmd = 0
+      if (incomingMessage.opcode === opcode) {
+        cmd = 1
+      }
+      const message = {
+        cmd,
+        opcode,
+        payload,
+        seq: incomingMessage.seq,
+        ver: 11,
+      }
+      ws.send(JSON.stringify(message))
+    })
+  }
+  catch (err) {
+    console.error(`Failed to process WebSocket message: ${err instanceof Error ? err.message : String(err)}`)
+  }
+})
+
+ws.addEventListener("error", (ev: unknown) => {
+  const msg = ev instanceof Error ? ev.message : String(ev)
+  console.error(`WebSocket error: ${msg}`)
 })
 
 ws.addEventListener("close", () => {
