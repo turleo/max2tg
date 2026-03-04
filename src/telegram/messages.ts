@@ -3,6 +3,7 @@ import { DEFAULT_CONTACT_NAME } from "../consts"
 import type { TelegramForwardOption } from "../types/config"
 import type { Attaches, Message } from "../types/max/opcodes/IncomingMessage"
 import type { StalledMessage } from "../types/messages"
+import type { TelegramMessage } from "../types/telegram"
 import { getDocumentForm } from "./documents"
 import { formatMessage } from "./formatting"
 import { getStickerForm } from "./stickers"
@@ -14,6 +15,60 @@ async function sendTextToTelegram(message: Message, to: TelegramForwardOption, f
       message_thread_id: to.threadId,
       ...formatMessage(message, from),
     }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  })
+}
+
+const MAX_MEDIA_PER_GROUP = 10
+
+type MediaAttach = Attaches & { _type: "PHOTO" | "VIDEO" | "FILE" }
+
+function isMediaAttach(attach: Attaches): attach is MediaAttach {
+  return attach._type === "PHOTO" || attach._type === "VIDEO" || attach._type === "FILE"
+}
+
+async function sendMediaGroupToTelegram(attaches: MediaAttach[], to: TelegramForwardOption, caption?: TelegramMessage): Promise<void> {
+  if (attaches.length === 0) {
+    return
+  }
+
+  const media = attaches.map((attach, index) => {
+    const base = {
+      type: attach._type === "PHOTO" ? "photo" : attach._type === "VIDEO" ? "video" : "document",
+      media: attach.baseUrl,
+    } as {
+      type: "photo" | "video" | "document"
+      media: string
+      caption?: string
+      caption_entities?: TelegramMessage["entities"]
+    }
+
+    if (caption && index === 0) {
+      base.caption = caption.text
+      base.caption_entities = caption.entities
+    }
+
+    return base
+  })
+
+  const payload = {
+    chat_id: to.chatId,
+    media,
+  } as {
+    chat_id: string | number
+    media: typeof media
+    message_thread_id?: number
+  }
+
+  if (to.threadId) {
+    payload.message_thread_id = to.threadId
+  }
+
+  await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendMediaGroup`, {
+    body: JSON.stringify(payload),
     headers: {
       "Content-Type": "application/json",
     },
@@ -136,18 +191,26 @@ async function sendVoiceToTelegram(attach: Attaches, to: TelegramForwardOption):
 }
 
 async function sendMessageToTelegram(message: StalledMessage, to: TelegramForwardOption) {
-  const attaches: Attaches[] = [...message.message.attaches, ...(message.message.link?.message.attaches ?? []), ...message.downloadedAttaches]
+  const attaches: Attaches[] = [
+    ...message.message.attaches,
+    ...(message.message.link?.message.attaches ?? []),
+    ...message.downloadedAttaches,
+  ]
+
+  const mediaAttaches: MediaAttach[] = []
+  const otherAttaches: Attaches[] = []
+
   for (const attach of attaches) {
+    if (isMediaAttach(attach)) {
+      mediaAttaches.push(attach)
+    }
+    else {
+      otherAttaches.push(attach)
+    }
+  }
+
+  for (const attach of otherAttaches) {
     switch (attach._type) {
-      case "PHOTO":
-        await sendPhotoToTelegram(attach, to)
-        break
-      case "VIDEO":
-        await sendVideoToTelegram(attach, to)
-        break
-      case "FILE":
-        await sendDocumentToTelegram(attach, to)
-        break
       case "STICKER":
         await sendStickerToTelegram(attach, to)
         break
@@ -164,7 +227,19 @@ async function sendMessageToTelegram(message: StalledMessage, to: TelegramForwar
         console.error(`Unknown attach type: ${attach._type}`)
     }
   }
-  await sendTextToTelegram(message.message, to, message.from ?? DEFAULT_CONTACT_NAME)
+
+  if (mediaAttaches.length === 0) {
+    await sendTextToTelegram(message.message, to, message.from ?? DEFAULT_CONTACT_NAME)
+    return
+  }
+
+  const caption = formatMessage(message.message, message.from ?? DEFAULT_CONTACT_NAME)
+
+  for (let i = 0; i < mediaAttaches.length; i += MAX_MEDIA_PER_GROUP) {
+    const chunk = mediaAttaches.slice(i, i + MAX_MEDIA_PER_GROUP)
+    const chunkCaption = i === 0 ? caption : undefined
+    await sendMediaGroupToTelegram(chunk, to, chunkCaption)
+  }
 }
 
 export function handleMessage(message: StalledMessage): StalledMessage | null {
