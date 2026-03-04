@@ -20,7 +20,7 @@ function appendThreadId(formData: FormData, to: TelegramForwardOption): void {
   if (!to.threadId) {
     return
   }
-  formData.append("thread_id", to.threadId.toString())
+  formData.append("message_thread_id", to.threadId.toString())
 }
 
 async function postTelegramForm(action: string, endpoint: string, formData: FormData): Promise<void> {
@@ -48,10 +48,10 @@ async function sendTextToTelegram(message: Message, to: TelegramForwardOption, f
 
 const MAX_MEDIA_PER_GROUP = 10
 
-type MediaAttach = Attaches & { _type: "PHOTO" | "VIDEO" | "FILE" }
+type MediaAttach = Attaches & { _type: "PHOTO" }
 
 function isMediaAttach(attach: Attaches): attach is MediaAttach {
-  return attach._type === "PHOTO" || attach._type === "VIDEO" || attach._type === "FILE"
+  return attach._type === "PHOTO"
 }
 
 async function sendMediaGroupToTelegram(attaches: MediaAttach[], to: TelegramForwardOption, caption?: TelegramMessage): Promise<void> {
@@ -91,42 +91,14 @@ async function sendMediaGroupToTelegram(attaches: MediaAttach[], to: TelegramFor
     payload.message_thread_id = to.threadId
   }
 
-  await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendMediaGroup`, {
+  const res = await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendMediaGroup`, {
     body: JSON.stringify(payload),
     headers: {
       "Content-Type": "application/json",
     },
     method: "POST",
   })
-}
-
-async function sendPhotoToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
-  const photoLink = attach.baseUrl
-  const res = await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendPhoto`, {
-    body: JSON.stringify({
-      chat_id: to.chatId,
-      photo: photoLink,
-      message_thread_id: to.threadId,
-    }),
-    headers: {
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-  })
-  await logTelegramError("photo", res)
-}
-
-async function sendVideoToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
-  const videoInfo = await getDocumentForm("video", attach)
-  if (!videoInfo) {
-    return
-  }
-  const [_videoType, videoBlob, videoFilename] = videoInfo
-  const formData = new FormData()
-  formData.append("chat_id", to.chatId.toString())
-  formData.append("video", videoBlob, `${videoFilename ?? "video"}.mp4`)
-  appendThreadId(formData, to)
-  await postTelegramForm("video", "sendVideo", formData)
+  await logTelegramError("media group", res)
 }
 
 async function sendStickerToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
@@ -139,18 +111,6 @@ async function sendStickerToTelegram(attach: Attaches, to: TelegramForwardOption
   formData.append(...stickerInfo)
   appendThreadId(formData, to)
   await postTelegramForm("sticker", "sendSticker", formData)
-}
-
-async function sendDocumentToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
-  const documentInfo = await getDocumentForm("document", attach)
-  if (!documentInfo) {
-    return
-  }
-  const formData = new FormData()
-  formData.append("chat_id", to.chatId.toString())
-  formData.append(...documentInfo)
-  appendThreadId(formData, to)
-  await postTelegramForm("document", "sendDocument", formData)
 }
 
 async function sendLocationToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
@@ -185,6 +145,31 @@ async function sendVoiceToTelegram(attach: Attaches, to: TelegramForwardOption):
   await postTelegramForm("voice", "sendVoice", formData)
 }
 
+async function sendVideoToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
+  const videoInfo = await getDocumentForm("video", attach)
+  if (!videoInfo) {
+    return
+  }
+  const [_videoType, videoBlob, videoFilename] = videoInfo
+  const formData = new FormData()
+  formData.append("chat_id", to.chatId.toString())
+  formData.append("video", videoBlob, `${videoFilename ?? "video"}.mp4`)
+  appendThreadId(formData, to)
+  await postTelegramForm("video", "sendVideo", formData)
+}
+
+async function sendDocumentToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
+  const documentInfo = await getDocumentForm("document", attach)
+  if (!documentInfo) {
+    return
+  }
+  const formData = new FormData()
+  formData.append("chat_id", to.chatId.toString())
+  formData.append(...documentInfo)
+  appendThreadId(formData, to)
+  await postTelegramForm("document", "sendDocument", formData)
+}
+
 async function sendMessageToTelegram(message: StalledMessage, to: TelegramForwardOption) {
   const attaches: Attaches[] = [
     ...message.message.attaches,
@@ -192,15 +177,30 @@ async function sendMessageToTelegram(message: StalledMessage, to: TelegramForwar
     ...message.downloadedAttaches,
   ]
 
-  const mediaAttaches: MediaAttach[] = []
+  const photoAttaches: MediaAttach[] = []
   const otherAttaches: Attaches[] = []
+  const downloadableMediaAttaches: Attaches[] = []
 
   for (const attach of attaches) {
     if (isMediaAttach(attach)) {
-      mediaAttaches.push(attach)
+      photoAttaches.push(attach)
     }
     else {
-      otherAttaches.push(attach)
+      // Use only "resolved" video/file attachments that came from download responses,
+      // skip initial VIDEO/FILE attaches that still have ids (they are handled via download opcodes).
+      if (attach._type === "VIDEO") {
+        if (!attach.videoId) {
+          downloadableMediaAttaches.push(attach)
+        }
+      }
+      else if (attach._type === "FILE") {
+        if (!attach.fileId) {
+          downloadableMediaAttaches.push(attach)
+        }
+      }
+      else {
+        otherAttaches.push(attach)
+      }
     }
   }
 
@@ -223,17 +223,25 @@ async function sendMessageToTelegram(message: StalledMessage, to: TelegramForwar
     }
   }
 
-  if (mediaAttaches.length === 0) {
+  if (photoAttaches.length === 0) {
     await sendTextToTelegram(message.message, to, message.from ?? DEFAULT_CONTACT_NAME)
-    return
   }
 
   const caption = formatMessage(message.message, message.from ?? DEFAULT_CONTACT_NAME)
 
-  for (let i = 0; i < mediaAttaches.length; i += MAX_MEDIA_PER_GROUP) {
-    const chunk = mediaAttaches.slice(i, i + MAX_MEDIA_PER_GROUP)
+  for (let i = 0; i < photoAttaches.length; i += MAX_MEDIA_PER_GROUP) {
+    const chunk = photoAttaches.slice(i, i + MAX_MEDIA_PER_GROUP)
     const chunkCaption = i === 0 ? caption : undefined
     await sendMediaGroupToTelegram(chunk, to, chunkCaption)
+  }
+
+  for (const attach of downloadableMediaAttaches) {
+    if (attach._type === "VIDEO") {
+      await sendVideoToTelegram(attach, to)
+    }
+    else if (attach._type === "FILE") {
+      await sendDocumentToTelegram(attach, to)
+    }
   }
 }
 
