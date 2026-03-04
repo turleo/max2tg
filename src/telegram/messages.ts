@@ -8,8 +8,31 @@ import { getDocumentForm } from "./documents"
 import { formatMessage } from "./formatting"
 import { getStickerForm } from "./stickers"
 
+async function logTelegramError(action: string, res: Response): Promise<void> {
+  if (res.ok) {
+    return
+  }
+  const text = await res.text()
+  console.error(`Failed to send ${action} to Telegram: ${String(res.status)} ${text}`)
+}
+
+function appendThreadId(formData: FormData, to: TelegramForwardOption): void {
+  if (!to.threadId) {
+    return
+  }
+  formData.append("thread_id", to.threadId.toString())
+}
+
+async function postTelegramForm(action: string, endpoint: string, formData: FormData): Promise<void> {
+  const res = await fetch(`https://api.telegram.org/bot${config.telegramToken}/${endpoint}`, {
+    body: formData,
+    method: "POST",
+  })
+  await logTelegramError(action, res)
+}
+
 async function sendTextToTelegram(message: Message, to: TelegramForwardOption, from: string): Promise<void> {
-  await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendMessage`, {
+  const res = await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendMessage`, {
     body: JSON.stringify({
       chat_id: to.chatId,
       message_thread_id: to.threadId,
@@ -20,6 +43,7 @@ async function sendTextToTelegram(message: Message, to: TelegramForwardOption, f
     },
     method: "POST",
   })
+  await logTelegramError("message", res)
 }
 
 const MAX_MEDIA_PER_GROUP = 10
@@ -78,7 +102,7 @@ async function sendMediaGroupToTelegram(attaches: MediaAttach[], to: TelegramFor
 
 async function sendPhotoToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
   const photoLink = attach.baseUrl
-  await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendPhoto`, {
+  const res = await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendPhoto`, {
     body: JSON.stringify({
       chat_id: to.chatId,
       photo: photoLink,
@@ -89,6 +113,7 @@ async function sendPhotoToTelegram(attach: Attaches, to: TelegramForwardOption):
     },
     method: "POST",
   })
+  await logTelegramError("photo", res)
 }
 
 async function sendVideoToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
@@ -100,13 +125,8 @@ async function sendVideoToTelegram(attach: Attaches, to: TelegramForwardOption):
   const formData = new FormData()
   formData.append("chat_id", to.chatId.toString())
   formData.append("video", videoBlob, `${videoFilename ?? "video"}.mp4`)
-  if (to.threadId) {
-    formData.append("message_thread_id", to.threadId.toString())
-  }
-  await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendVideo`, {
-    body: formData,
-    method: "POST",
-  })
+  appendThreadId(formData, to)
+  await postTelegramForm("video", "sendVideo", formData)
 }
 
 async function sendStickerToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
@@ -117,13 +137,8 @@ async function sendStickerToTelegram(attach: Attaches, to: TelegramForwardOption
   const formData = new FormData()
   formData.append("chat_id", to.chatId.toString())
   formData.append(...stickerInfo)
-  if (to.threadId) {
-    formData.append("message_thread_id", to.threadId.toString())
-  }
-  await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendSticker`, {
-    body: formData,
-    method: "POST",
-  })
+  appendThreadId(formData, to)
+  await postTelegramForm("sticker", "sendSticker", formData)
 }
 
 async function sendDocumentToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
@@ -134,13 +149,8 @@ async function sendDocumentToTelegram(attach: Attaches, to: TelegramForwardOptio
   const formData = new FormData()
   formData.append("chat_id", to.chatId.toString())
   formData.append(...documentInfo)
-  if (to.threadId) {
-    formData.append("message_thread_id", to.threadId.toString())
-  }
-  await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendDocument`, {
-    body: formData,
-    method: "POST",
-  })
+  appendThreadId(formData, to)
+  await postTelegramForm("document", "sendDocument", formData)
 }
 
 async function sendLocationToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
@@ -149,13 +159,8 @@ async function sendLocationToTelegram(attach: Attaches, to: TelegramForwardOptio
   formData.append("latitude", attach.latitude?.toString() ?? "0")
   formData.append("longitude", attach.longitude?.toString() ?? "0")
   formData.append("zoom", attach.zoom?.toString() ?? "1")
-  if (to.threadId) {
-    formData.append("message_thread_id", to.threadId.toString())
-  }
-  await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendLocation`, {
-    body: formData,
-    method: "POST",
-  })
+  appendThreadId(formData, to)
+  await postTelegramForm("location", "sendLocation", formData)
 }
 
 async function sendContactToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
@@ -164,13 +169,8 @@ async function sendContactToTelegram(attach: Attaches, to: TelegramForwardOption
   formData.append("phone_number", attach.phoneNumber?.toString() ?? "")
   formData.append("first_name", attach.firstName?.toString() ?? "")
   formData.append("last_name", attach.lastName?.toString() ?? "")
-  if (to.threadId) {
-    formData.append("message_thread_id", to.threadId.toString())
-  }
-  await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendContact`, {
-    body: formData,
-    method: "POST",
-  })
+  appendThreadId(formData, to)
+  await postTelegramForm("contact", "sendContact", formData)
 }
 
 async function sendVoiceToTelegram(attach: Attaches, to: TelegramForwardOption): Promise<void> {
@@ -181,13 +181,8 @@ async function sendVoiceToTelegram(attach: Attaches, to: TelegramForwardOption):
   const formData = new FormData()
   formData.append("chat_id", to.chatId.toString())
   formData.append(...voiceInfo)
-  if (to.threadId) {
-    formData.append("message_thread_id", to.threadId.toString())
-  }
-  await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendVoice`, {
-    body: formData,
-    method: "POST",
-  })
+  appendThreadId(formData, to)
+  await postTelegramForm("voice", "sendVoice", formData)
 }
 
 async function sendMessageToTelegram(message: StalledMessage, to: TelegramForwardOption) {
