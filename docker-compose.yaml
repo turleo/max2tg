@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  max2tg:
+    build: .
+    restart: always
+    environment:
+      - CONFIG_PATH=/config/
+    volumes:
+      - ./config:/config
