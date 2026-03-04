@@ -121,6 +121,9 @@ export function nextMessage<O extends typeof allOpcodes[number]>(message: Messag
         chatId: (payload as IncomingMessageOutput).chatId,
         messageId: incomingMessage.id,
       }, OPCODE_INCOMING_MESSAGE]]
+      if (incomingMessage.status === "REMOVED") {
+        return [[undefined, OPCODE_NOOP]]
+      }
       answer = answer.concat(downloadAttachments(incomingMessage, (payload as IncomingMessageOutput).chatId))
       stalledMessage = unwrapMessage(incomingMessage, (payload as IncomingMessageOutput).chatId)
       if (incomingMessage.sender && !Object.keys(contacts).includes(incomingMessage.sender.toString())) {
