@@ -16,6 +16,7 @@ export interface Message {
   sender: number
   id: string
   time: number
+  status: string
   text: string
   type: string
   cid: number
