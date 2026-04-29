@@ -54,6 +54,16 @@ function isMediaAttach(attach: Attaches): attach is MediaAttach {
   return attach._type === "PHOTO"
 }
 
+function getMediaAttachType(attach: Attaches): "photo" | "video" | "document" {
+  if (attach._type === "PHOTO") {
+    return "photo"
+  }
+  if (attach._type === "VIDEO") {
+    return "video"
+  }
+  return "document"
+}
+
 async function sendMediaGroupToTelegram(attaches: MediaAttach[], to: TelegramForwardOption, caption?: TelegramMessage): Promise<void> {
   if (attaches.length === 0) {
     return
@@ -61,8 +71,8 @@ async function sendMediaGroupToTelegram(attaches: MediaAttach[], to: TelegramFor
 
   const media = attaches.map((attach, index) => {
     const base = {
-      type: attach._type === "PHOTO" ? "photo" : attach._type === "VIDEO" ? "video" : "document",
       media: attach.baseUrl,
+      type: getMediaAttachType(attach),
     } as {
       type: "photo" | "video" | "document"
       media: string
@@ -170,6 +180,7 @@ async function sendDocumentToTelegram(attach: Attaches, to: TelegramForwardOptio
   await postTelegramForm("document", "sendDocument", formData)
 }
 
+// eslint-disable-next-line
 async function sendMessageToTelegram(message: StalledMessage, to: TelegramForwardOption) {
   const attaches: Attaches[] = [
     ...message.message.attaches,
@@ -185,22 +196,16 @@ async function sendMessageToTelegram(message: StalledMessage, to: TelegramForwar
     if (isMediaAttach(attach)) {
       photoAttaches.push(attach)
     }
+    else if (attach._type === "VIDEO" && !attach.videoId) {
+      downloadableMediaAttaches.push(attach)
+    }
+    else if (attach._type === "FILE" && !attach.fileId) {
+      downloadableMediaAttaches.push(attach)
+    }
     else {
       // Use only "resolved" video/file attachments that came from download responses,
-      // skip initial VIDEO/FILE attaches that still have ids (they are handled via download opcodes).
-      if (attach._type === "VIDEO") {
-        if (!attach.videoId) {
-          downloadableMediaAttaches.push(attach)
-        }
-      }
-      else if (attach._type === "FILE") {
-        if (!attach.fileId) {
-          downloadableMediaAttaches.push(attach)
-        }
-      }
-      else {
-        otherAttaches.push(attach)
-      }
+      // Skip initial VIDEO/FILE attaches that still have ids (they are handled via download opcodes).
+      otherAttaches.push(attach)
     }
   }
 
@@ -229,9 +234,9 @@ async function sendMessageToTelegram(message: StalledMessage, to: TelegramForwar
 
   const caption = formatMessage(message.message, message.from ?? DEFAULT_CONTACT_NAME)
 
-  for (let i = 0; i < photoAttaches.length; i += MAX_MEDIA_PER_GROUP) {
-    const chunk = photoAttaches.slice(i, i + MAX_MEDIA_PER_GROUP)
-    const chunkCaption = i === 0 ? caption : undefined
+  for (let photoIndex = 0; photoIndex < photoAttaches.length; photoIndex += MAX_MEDIA_PER_GROUP) {
+    const chunk = photoAttaches.slice(photoIndex, photoIndex + MAX_MEDIA_PER_GROUP)
+    const chunkCaption = photoIndex === 0 ? caption : undefined
     await sendMediaGroupToTelegram(chunk, to, chunkCaption)
   }
 
