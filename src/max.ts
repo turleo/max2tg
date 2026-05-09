@@ -44,9 +44,6 @@ export class MaxWebSocketClient implements MaxWebSocketClientInterface {
         "Sec-Fetch-Site": "cross-site",
         "User-Agent": this.config.userAgent.headerUserAgent,
       },
-      proxy: {
-        url: "http://localhost:8080",
-      },
     })
     this.heartbeatInterval = setInterval(() => {
       this.ws?.send(JSON.stringify({
