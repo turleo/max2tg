@@ -1,38 +1,26 @@
-# dependencies (bun install)
-node_modules
+# The directory Mix will write compiled artifacts to.
+/_build/
 
-# output
-out
-dist
-*.tgz
+# If you run "mix test --cover", coverage assets end up here.
+/cover/
 
-# code coverage
-coverage
-*.lcov
+# The directory Mix downloads your dependencies sources to.
+/deps/
 
-# logs
-logs
-_.log
-report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+# Where third-party dependencies like ExDoc output generated docs.
+/doc/
 
-# dotenv environment variable files
-.env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+# Temporary files, for example, from tests.
+/tmp/
 
-# caches
-.eslintcache
-.cache
-*.tsbuildinfo
+# If the VM crashes, it generates a dump, let's ignore it too.
+erl_crash.dump
 
-# IntelliJ based IDEs
-.idea
+# Also ignore archive artifacts (built via "mix archive.build").
+*.ez
 
-# Finder (MacOS) folder config
+# Ignore package tarball (built via "mix hex.build").
+max2tg-*.tar
+
 .DS_Store
-
-config.toml
-.envrc
-.direnv
+config/runtime.exs
