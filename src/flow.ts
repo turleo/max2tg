@@ -1,16 +1,15 @@
 /* eslint-disable max-lines-per-function */
-import { randomUUIDv7 } from "bun"
 import config from "./config"
 import { handleMessage } from "./telegram/messages"
 import type Message from "./types/max/Message"
-import type { allOpcodes, InputsMap, OutputsMap } from "./types/max/opcodes"
+import type { allOpcodes, OutputsMap } from "./types/max/opcodes"
 import type { DownloadDocumentOutput } from "./types/max/opcodes/DownloadDocument"
 import type { DownloadVideoOutput } from "./types/max/opcodes/DownloadVideo"
 import type { Attaches, IncomingMessageOutput } from "./types/max/opcodes/IncomingMessage"
-import type { Chat, LoginInput, LoginOutput } from "./types/max/opcodes/Login"
+import type { Chat, LoginOutput } from "./types/max/opcodes/Login"
 import { OPCODE_CHAT_UPDATE, OPCODE_CLIENT_INFO, OPCODE_DOWNLOAD_DOCUMENT, OPCODE_DOWNLOAD_VIDEO, OPCODE_HANDSHAKE, OPCODE_HEARTBEAT, OPCODE_INCOMING_MESSAGE, OPCODE_LOGIN, OPCODE_NOOP, OPCODE_PRESENCE_UPDATE, OPCODE_USER_INFO } from "./types/max/opcodes/opcodes"
 import type { UserInfoOutput } from "./types/max/opcodes/UserInfo"
-import type { StalledMessage } from "./types/messages"
+import type { NextMessageOutput, NextMessageOutputItem, StalledMessage } from "./types/messages"
 
 const contacts: Record<number, string> = {}
 let stalledMessage: StalledMessage | null = null
@@ -49,38 +48,53 @@ function logMonitoredChats(chats: Chat[]): void {
   }
 }
 
-function createAuthMessage(): [LoginInput, typeof OPCODE_LOGIN] {
+function createAuthMessage(): NextMessageOutputItem<typeof OPCODE_LOGIN> {
   if (!config.maxToken) {
     throw new Error("Max token is not set")
   }
-  return [{
-    chatsCount: 40,
-    chatsSync: 0,
-    contactsSync: 0,
-    draftsSync: 0,
-    interactive: true,
-    presenceSync: 0,
-    token: config.maxToken,
-  }, OPCODE_LOGIN]
+  return {
+    opcode: OPCODE_LOGIN,
+    originalOpcode: OPCODE_NOOP,
+    payload: {
+      chatsCount: 40,
+      chatsSync: 0,
+      contactsSync: 0,
+      draftsSync: 0,
+      interactive: true,
+      presenceSync: 0,
+      token: config.maxToken,
+    },
+    seq: 0,
+  }
 }
 
-function downloadAttachments(message: IncomingMessageOutput["message"], chatId: number): NextMessageOutput {
+function downloadAttachments(message: IncomingMessageOutput["message"], chatId: number, seq: number): NextMessageOutput {
   const attachments: Attaches[] = [...message.attaches, ...(message.link?.message.attaches ?? [])]
   const answer: NextMessageOutput = []
   for (const attachment of attachments) {
     if (attachment._type === "VIDEO") {
-      answer.push([{
-        chatId,
-        messageId: message.id,
-        videoId: attachment.videoId,
-      }, OPCODE_DOWNLOAD_VIDEO])
+      answer.push({
+        opcode: OPCODE_DOWNLOAD_VIDEO,
+        originalOpcode: OPCODE_DOWNLOAD_VIDEO,
+        payload: {
+          chatId,
+          messageId: message.id,
+          videoId: attachment.videoId,
+        },
+        seq,
+      })
     }
     else if (attachment._type === "FILE") {
-      answer.push([{
-        chatId,
-        fileId: attachment.fileId,
-        messageId: message.id,
-      }, OPCODE_DOWNLOAD_DOCUMENT])
+      answer.push({
+        opcode: OPCODE_DOWNLOAD_DOCUMENT,
+        originalOpcode: OPCODE_DOWNLOAD_DOCUMENT,
+        payload: {
+          chatId,
+          fileId: attachment.fileId,
+          messageId: message.id,
+        },
+        seq,
+      })
     }
   }
   return answer
@@ -101,35 +115,38 @@ function unwrapMessage(message: IncomingMessageOutput["message"], chatId: number
   }
 }
 
-type NextMessageOutput = [InputsMap[typeof allOpcodes[number]], typeof allOpcodes[number]][]
-
 // eslint-disable-next-line max-statements
 export function nextMessage<O extends typeof allOpcodes[number]>(message: Message<O>): NextMessageOutput {
   // eslint-disable-next-line prefer-destructuring
   const payload: OutputsMap[O] = message.payload
   switch (message.opcode) {
-    case OPCODE_NOOP:
-      return [[{
-        deviceId: config.deviceId ?? randomUUIDv7(),
-        userAgent: config.userAgent,
-      }, OPCODE_HANDSHAKE]]
     case OPCODE_HANDSHAKE:
       return [createAuthMessage()]
     case OPCODE_INCOMING_MESSAGE:
       const { message: incomingMessage } = payload as IncomingMessageOutput
-      let answer: NextMessageOutput = [[{
-        chatId: (payload as IncomingMessageOutput).chatId,
-        messageId: incomingMessage.id,
-      }, OPCODE_INCOMING_MESSAGE]]
+      let answer: NextMessageOutput = [{
+        opcode: OPCODE_INCOMING_MESSAGE,
+        originalOpcode: OPCODE_INCOMING_MESSAGE,
+        payload: {
+          chatId: (payload as IncomingMessageOutput).chatId,
+          messageId: incomingMessage.id,
+        },
+        seq: message.seq,
+      }]
       if (incomingMessage.status === "REMOVED") {
-        return [[undefined, OPCODE_NOOP]]
+        return []
       }
-      answer = answer.concat(downloadAttachments(incomingMessage, (payload as IncomingMessageOutput).chatId))
+      answer = answer.concat(downloadAttachments(incomingMessage, (payload as IncomingMessageOutput).chatId, message.seq))
       stalledMessage = unwrapMessage(incomingMessage, (payload as IncomingMessageOutput).chatId)
       if (incomingMessage.sender && !Object.keys(contacts).includes(incomingMessage.sender.toString())) {
-        answer.push([{
-          contactIds: [incomingMessage.sender],
-        }, OPCODE_USER_INFO])
+        answer.push({
+          opcode: OPCODE_USER_INFO,
+          originalOpcode: OPCODE_INCOMING_MESSAGE,
+          payload: {
+            contactIds: [incomingMessage.sender],
+          },
+          seq: message.seq,
+        })
       }
       // -1 for the incoming message itself
       stalledMessage.requestsLeft += answer.length - 1
@@ -141,14 +158,14 @@ export function nextMessage<O extends typeof allOpcodes[number]>(message: Messag
         stalledMessage.downloadedAttaches.push({ _type: "VIDEO", baseUrl: getVideoUrl(payload as DownloadVideoOutput) })
         stalledMessage = handleMessage(stalledMessage)
       }
-      return [[undefined, OPCODE_NOOP]]
+      return []
     case OPCODE_DOWNLOAD_DOCUMENT:
       if (stalledMessage) {
         stalledMessage.requestsLeft -= 1
         stalledMessage.downloadedAttaches.push({ _type: "FILE", baseUrl: (payload as DownloadDocumentOutput).url })
         stalledMessage = handleMessage(stalledMessage)
       }
-      return [[undefined, OPCODE_NOOP]]
+      return []
     case OPCODE_USER_INFO:
       (payload as UserInfoOutput).contacts.forEach((contact) => {
         contacts[contact.id] = contact.names.map(name => `${name.firstName ?? ""} ${name.lastName ?? ""}`.trim()).join(", ")
@@ -158,17 +175,17 @@ export function nextMessage<O extends typeof allOpcodes[number]>(message: Messag
         stalledMessage.requestsLeft -= 1
         stalledMessage = handleMessage(stalledMessage)
       }
-      return [[undefined, OPCODE_NOOP]]
+      return []
     case OPCODE_LOGIN:
       logMonitoredChats((payload as LoginOutput).chats)
-      return [[undefined, OPCODE_NOOP]]
+      return []
     case OPCODE_HEARTBEAT:
     case OPCODE_CHAT_UPDATE:
     case OPCODE_PRESENCE_UPDATE:
     case OPCODE_CLIENT_INFO:
-      return [[undefined, OPCODE_NOOP]]
+      return []
     default:
       console.error(`Unknown opcode: ${message.opcode.toString()}`)
-      return [[undefined as InputsMap[typeof allOpcodes[number]], OPCODE_NOOP]]
+      return []
   }
 }
