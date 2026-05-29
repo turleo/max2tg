@@ -279,5 +279,10 @@ export function handleMessage(message: StalledMessage): StalledMessage | null {
       sendMessageToTelegram(message, forward.to).catch(console.error)
     }
   }
+  for (const forward of config.forward) {
+    if (forward.from === undefined) {
+      sendMessageToTelegram(message, forward.to).catch(console.error)
+    }
+  }
   return null
 }

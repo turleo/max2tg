@@ -22,6 +22,6 @@ export default interface Config {
 }
 
 interface ForwardOption {
-  from: MaxChatId
+  from?: MaxChatId
   to: TelegramForwardOption
 }

@@ -32,19 +32,30 @@ function isChatMonitored(chat: Chat): boolean {
   return monitoredIds.has(chat.id) || (chat.cid !== undefined && monitoredIds.has(chat.cid))
 }
 
+function isEveryChatMonitored(): boolean {
+  return config.forward.map(forward => forward.from).filter(forward => forward === undefined).length !== 0
+}
+
+function getChatTypeLogo(chat: Chat): string {
+  if (chat.type === "CHANNEL") {
+    return "📢"
+  }
+  else if (chat.type === "CHAT") {
+    return "👥"
+  }
+  return "💬"
+}
+
 function logMonitoredChats(chats: Chat[]): void {
   const monitoredChats = chats.filter(isChatMonitored)
   console.info("Monitoring:")
   for (const chat of monitoredChats) {
     const chatName = getChatName(chat)
-    let chatType = "💬"
-    if (chat.type === "CHANNEL") {
-      chatType = "📢"
-    }
-    else if (chat.type === "CHAT") {
-      chatType = "👥"
-    }
+    const chatType = getChatTypeLogo(chat)
     console.info(`${chatType} ${chatName}`)
+  }
+  if (isEveryChatMonitored()) {
+    console.info("👀 All other chats")
   }
 }
 
