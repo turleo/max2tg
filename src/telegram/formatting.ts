@@ -1,5 +1,6 @@
 import { DEFAULT_CHAT_NAME } from "../consts"
-import type { Attaches, Element as MaxFormatting, Message } from "../types/max/opcodes/IncomingMessage"
+import type { Attaches, Element as MaxFormatting } from "../types/max/opcodes/IncomingMessage"
+import type { StalledMessage } from "../types/messages"
 import type { Formatting as TelegramFormatting, TelegramMessage } from "../types/telegram"
 
 function attachToString(attach: Attaches): string {
@@ -54,20 +55,25 @@ function formatFormatting(formatting: MaxFormatting[], titleLength: number): Tel
   return formatted.filter(element => element.type !== undefined) as TelegramFormatting[]
 }
 
-function formatTitle(message: Message, from: string): string {
-  let title = `💁‍♂️ ${from}`
+function formatTitle(stalledMessage: StalledMessage): string {
+  const { from, fromChatName, message, wildcardFrom } = stalledMessage
+  let title = ""
+  if (wildcardFrom) {
+    title += `💬 ${fromChatName}\n`
+  }
+  title += `💁‍♂️ ${from}`
   if (message.link?.type === "FORWARD") {
     title += `➡️ ${message.link.chatName ?? DEFAULT_CHAT_NAME}`
   }
-  else if (message.link?.type === "REPLY") {
+  if (message.link?.type === "REPLY") {
     title += `↩️`
   }
-  title += "\n\n"
   return title
 }
 
-export function formatMessage(message: Message, from: string): TelegramMessage {
-  const title = formatTitle(message, from)
+export function formatMessage(stalledMessage: StalledMessage): TelegramMessage {
+  const { message } = stalledMessage
+  const title = formatTitle(stalledMessage)
   const defaultMessage = message.link?.type === "FORWARD" ? message.link.message : message
   const formatting = formatFormatting(defaultMessage.elements ?? [], title.length)
   let messageText = defaultMessage.text
@@ -77,6 +83,6 @@ export function formatMessage(message: Message, from: string): TelegramMessage {
   const attaches = defaultMessage.attaches.map(attachToString).join(",")
   return {
     entities: formatting,
-    text: `${title}${messageText}${attaches}`,
+    text: `${title}\n\n${messageText}${attaches}`,
   }
 }

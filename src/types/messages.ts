@@ -13,7 +13,9 @@ export interface NextMessageOutputItem<O extends typeof allOpcodes[number]> {
 export interface StalledMessage {
   message: IncomingMessageOutput["message"]
   chatId: number
-  from?: string
+  from: string
+  fromChatName: string
   requestsLeft: number
   downloadedAttaches: Attaches[]
+  wildcardFrom?: boolean
 }

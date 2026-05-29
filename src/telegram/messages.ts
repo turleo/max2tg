@@ -1,7 +1,6 @@
 import config from "../config"
-import { DEFAULT_CONTACT_NAME } from "../consts"
 import type { TelegramForwardOption } from "../types/config"
-import type { Attaches, Message } from "../types/max/opcodes/IncomingMessage"
+import type { Attaches } from "../types/max/opcodes/IncomingMessage"
 import type { StalledMessage } from "../types/messages"
 import type { TelegramMessage } from "../types/telegram"
 import { getDocumentForm } from "./documents"
@@ -51,12 +50,12 @@ export async function sendAlertToTelegram(text: string): Promise<void> {
   await logTelegramError("alert", res)
 }
 
-async function sendTextToTelegram(message: Message, to: TelegramForwardOption, from: string): Promise<void> {
+async function sendTextToTelegram(stalledMessage: StalledMessage, to: TelegramForwardOption): Promise<void> {
   const res = await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendMessage`, {
     body: JSON.stringify({
       chat_id: to.chatId,
       message_thread_id: to.threadId,
-      ...formatMessage(message, from),
+      ...formatMessage(stalledMessage),
     }),
     headers: {
       "Content-Type": "application/json",
@@ -249,10 +248,10 @@ async function sendMessageToTelegram(message: StalledMessage, to: TelegramForwar
   }
 
   if (photoAttaches.length === 0) {
-    await sendTextToTelegram(message.message, to, message.from ?? DEFAULT_CONTACT_NAME)
+    await sendTextToTelegram(message, to)
   }
 
-  const caption = formatMessage(message.message, message.from ?? DEFAULT_CONTACT_NAME)
+  const caption = formatMessage(message)
 
   for (let photoIndex = 0; photoIndex < photoAttaches.length; photoIndex += MAX_MEDIA_PER_GROUP) {
     const chunk = photoAttaches.slice(photoIndex, photoIndex + MAX_MEDIA_PER_GROUP)
@@ -281,6 +280,7 @@ export function handleMessage(message: StalledMessage): StalledMessage | null {
   }
   for (const forward of config.forward) {
     if (forward.from === undefined) {
+      message.wildcardFrom = true
       sendMessageToTelegram(message, forward.to).catch(console.error)
     }
   }

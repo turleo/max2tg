@@ -1,5 +1,6 @@
 /* eslint-disable max-lines-per-function */
 import config from "./config"
+import { DEFAULT_CHAT_NAME, DEFAULT_CONTACT_NAME } from "./consts"
 import { handleMessage } from "./telegram/messages"
 import type Message from "./types/max/Message"
 import type { allOpcodes, OutputsMap } from "./types/max/opcodes"
@@ -12,19 +13,30 @@ import type { UserInfoOutput } from "./types/max/opcodes/UserInfo"
 import type { NextMessageOutput, NextMessageOutputItem, StalledMessage } from "./types/messages"
 
 const contacts: Record<number, string> = {}
+const chats: Record<number, string> = {}
 let stalledMessage: StalledMessage | null = null
 
+function getChatType(chat: Chat): string {
+  if (chat.type === "CHANNEL") {
+    return "📢"
+  }
+  else if (chat.type === "CHAT") {
+    return "👥"
+  }
+  return "💬"
+}
+
 function getChatName(chat: Chat): string {
+  const chatType = getChatType(chat)
   if (chat.title) {
-    return chat.title
+    return `${chatType} ${chat.title}`
   }
   if (chat.type === "DIALOG") {
     if (chat.id === 0) {
-      return "Избранное"
+      return `${chatType} Избранное`
     }
-    return `Диалог (ID: ${chat.id.toString()})`
   }
-  return `Чат (ID: ${chat.id.toString()})`
+  return `${chatType} (ID: ${chat.id.toString()})`
 }
 
 function isChatMonitored(chat: Chat): boolean {
@@ -36,23 +48,12 @@ function isEveryChatMonitored(): boolean {
   return config.forward.map(forward => forward.from).filter(forward => forward === undefined).length !== 0
 }
 
-function getChatTypeLogo(chat: Chat): string {
-  if (chat.type === "CHANNEL") {
-    return "📢"
-  }
-  else if (chat.type === "CHAT") {
-    return "👥"
-  }
-  return "💬"
-}
-
-function logMonitoredChats(chats: Chat[]): void {
-  const monitoredChats = chats.filter(isChatMonitored)
+function logMonitoredChats(incomingChats: Chat[]): void {
+  const monitoredChats = incomingChats.filter(isChatMonitored)
   console.info("Monitoring:")
   for (const chat of monitoredChats) {
     const chatName = getChatName(chat)
-    const chatType = getChatTypeLogo(chat)
-    console.info(`${chatType} ${chatName}`)
+    console.info(chatName)
   }
   if (isEveryChatMonitored()) {
     console.info("👀 All other chats")
@@ -120,7 +121,8 @@ function unwrapMessage(message: IncomingMessageOutput["message"], chatId: number
   return {
     chatId,
     downloadedAttaches: [],
-    from: contacts[message.sender] ?? "Кто-то",
+    from: contacts[message.sender] ?? DEFAULT_CONTACT_NAME,
+    fromChatName: chats[chatId] ?? DEFAULT_CHAT_NAME,
     message,
     requestsLeft: 0,
   }
@@ -189,6 +191,9 @@ export function nextMessage<O extends typeof allOpcodes[number]>(message: Messag
       return []
     case OPCODE_LOGIN:
       logMonitoredChats((payload as LoginOutput).chats)
+      for (const chat of (payload as LoginOutput).chats) {
+        chats[chat.id] = getChatName(chat)
+      }
       return []
     case OPCODE_HEARTBEAT:
     case OPCODE_CHAT_UPDATE:
