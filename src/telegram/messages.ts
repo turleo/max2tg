@@ -31,6 +31,26 @@ async function postTelegramForm(action: string, endpoint: string, formData: Form
   await logTelegramError(action, res)
 }
 
+export async function sendAlertToTelegram(text: string): Promise<void> {
+  const to = config.adminNotifictions
+  if (to === null) {
+    console.error(text)
+    return
+  }
+  const res = await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendMessage`, {
+    body: JSON.stringify({
+      chat_id: to.chatId,
+      message_thread_id: to.threadId,
+      text,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  })
+  await logTelegramError("alert", res)
+}
+
 async function sendTextToTelegram(message: Message, to: TelegramForwardOption, from: string): Promise<void> {
   const res = await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendMessage`, {
     body: JSON.stringify({

@@ -18,6 +18,7 @@ export default interface Config {
   maxToken?: LoginInput["token"]
   deviceId?: HandshakeInput["deviceId"]
   forward: ForwardOption[]
+  adminNotifictions: TelegramForwardOption?
 }
 
 interface ForwardOption {

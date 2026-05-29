@@ -1,5 +1,6 @@
 import { randomUUIDv7 } from "bun"
-import { HEARTBEAT_INTERVAL } from "./consts"
+import { ERROR_CODE_ECONNRESET, FAILURE_ALERT_THRESHOLD, FAILURE_WINDOW_MS, HEARTBEAT_INTERVAL } from "./consts"
+import { sendAlertToTelegram } from "./telegram/messages"
 import type Config from "./types/config"
 import type Message from "./types/max/Message"
 import { allOpcodes, OPCODE_HANDSHAKE, OPCODE_HEARTBEAT, OPCODE_NOOP } from "./types/max/opcodes/opcodes"
@@ -11,6 +12,8 @@ export interface MaxWebSocketClientInterface {
   onNewMessage: (message: Message<typeof allOpcodes[number]>) => NextMessageOutput
   ws: WebSocket | undefined
   heartbeatInterval: NodeJS.Timeout | undefined
+  previousInit: number
+  initsInRaw: number
 }
 
 function onErrorListener(event: Event) {
@@ -20,6 +23,24 @@ function onErrorListener(event: Event) {
 
 export class MaxWebSocketClient implements MaxWebSocketClientInterface {
   queue: NextMessageOutput = []
+  previousInit = Date.now()
+  initsInRaw = 0
+
+  async recordInit(): Promise<void> {
+    if (this.initsInRaw > FAILURE_ALERT_THRESHOLD) {
+      await sendAlertToTelegram(`⚠️ WebSocket disconnected ${this.initsInRaw.toString()} times in last ${FAILURE_ALERT_THRESHOLD.toString()} seconds`)
+      process.exit(ERROR_CODE_ECONNRESET)
+    }
+    const now = Date.now()
+    if (this.previousInit - now < FAILURE_WINDOW_MS) {
+      this.initsInRaw += 1
+    }
+    else {
+      this.initsInRaw = 0
+    }
+    this.previousInit = now
+  }
+
   cleanup() {
     clearInterval(this.heartbeatInterval)
     try {
@@ -35,8 +56,9 @@ export class MaxWebSocketClient implements MaxWebSocketClientInterface {
     this.config = config
   }
 
-  init() {
+  async init() {
     console.info("Initializing WebSocket client")
+    await this.recordInit()
     this.ws = new WebSocket("wss://ws-api.oneme.ru/websocket", {
       headers: {
         "Origin": "https://web.max.ru",
@@ -70,6 +92,9 @@ export class MaxWebSocketClient implements MaxWebSocketClientInterface {
       },
     )
     this.ws.addEventListener("error", onErrorListener)
+    this.ws.addEventListener("close", () => {
+      this.onCloseListener()
+    })
     this.ws.addEventListener("open", () => {
       this.flushQueue()
     })
@@ -90,7 +115,7 @@ export class MaxWebSocketClient implements MaxWebSocketClientInterface {
   onCloseListener() {
     console.warn("WebSocket closed")
     this.cleanup()
-    this.init()
+    this.init().catch(console.error)
   }
 
   // eslint-disable-next-line max-statements
