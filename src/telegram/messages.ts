@@ -274,7 +274,7 @@ function forwardMessageToConfiguredChats(message: StalledMessage): boolean {
   for (const forward of forwardTo) {
     sendMessageToTelegram(message, forward.to).catch(console.error)
   }
-  return forwardTo.length === 0
+  return forwardTo.length !== 0
 }
 
 function forwardMessageToWildcard(message: StalledMessage): void {
