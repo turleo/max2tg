@@ -269,20 +269,29 @@ async function sendMessageToTelegram(message: StalledMessage, to: TelegramForwar
   }
 }
 
+function forwardMessageToConfiguredChats(message: StalledMessage): boolean {
+  const forwardTo = config.forward.filter(forward => forward.from === message.chatId)
+  for (const forward of forwardTo) {
+    sendMessageToTelegram(message, forward.to).catch(console.error)
+  }
+  return forwardTo.length === 0
+}
+
+function forwardMessageToWildcard(message: StalledMessage): void {
+  const forwardWildcard = config.forward.filter(forward => forward.from === undefined)
+  for (const forward of forwardWildcard) {
+    message.wildcardFrom = true
+    sendMessageToTelegram(message, forward.to).catch(console.error)
+  }
+}
+
 export function handleMessage(message: StalledMessage): StalledMessage | null {
   if (message.requestsLeft > 0) {
     return message
   }
-  for (const forward of config.forward) {
-    if (forward.from === message.chatId) {
-      sendMessageToTelegram(message, forward.to).catch(console.error)
-    }
-  }
-  for (const forward of config.forward) {
-    if (forward.from === undefined) {
-      message.wildcardFrom = true
-      sendMessageToTelegram(message, forward.to).catch(console.error)
-    }
+  const forwarded = forwardMessageToConfiguredChats(message)
+  if (!forwarded) {
+    forwardMessageToWildcard(message)
   }
   return null
 }
