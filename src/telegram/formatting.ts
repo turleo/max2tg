@@ -59,7 +59,7 @@ function formatTitle(stalledMessage: StalledMessage): string {
   const { from, fromChatName, message, wildcardFrom } = stalledMessage
   let title = ""
   if (wildcardFrom) {
-    title += `💬 ${fromChatName}\n`
+    title += `${fromChatName}\n`
   }
   title += `💁‍♂️ ${from}`
   if (message.link?.type === "FORWARD") {
@@ -68,7 +68,7 @@ function formatTitle(stalledMessage: StalledMessage): string {
   if (message.link?.type === "REPLY") {
     title += `↩️`
   }
-  return title
+  return `${title}\n\n`
 }
 
 export function formatMessage(stalledMessage: StalledMessage): TelegramMessage {
@@ -83,6 +83,6 @@ export function formatMessage(stalledMessage: StalledMessage): TelegramMessage {
   const attaches = defaultMessage.attaches.map(attachToString).join(",")
   return {
     entities: formatting,
-    text: `${title}\n\n${messageText}${attaches}`,
+    text: `${title}${messageText}${attaches}`,
   }
 }
