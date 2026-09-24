@@ -7,6 +7,11 @@ import { getDocumentForm } from "./documents"
 import { formatMessage } from "./formatting"
 import { getStickerForm } from "./stickers"
 
+const TELEGRAM_CAPTION_LIMIT = 1024
+const MAX_MEDIA_PER_GROUP = 10
+
+type MediaAttach = Attaches & { _type: "PHOTO" }
+
 async function logTelegramError(action: string, res: Response): Promise<void> {
   if (res.ok) {
     return
@@ -63,14 +68,6 @@ async function sendTextToTelegram(stalledMessage: StalledMessage, to: TelegramFo
     method: "POST",
   })
   await logTelegramError("message", res)
-}
-
-const MAX_MEDIA_PER_GROUP = 10
-
-type MediaAttach = Attaches & { _type: "PHOTO" }
-
-function isMediaAttach(attach: Attaches): attach is MediaAttach {
-  return attach._type === "PHOTO"
 }
 
 function getMediaAttachType(attach: Attaches): "photo" | "video" | "document" {
@@ -212,8 +209,8 @@ async function sendMessageToTelegram(message: StalledMessage, to: TelegramForwar
   const downloadableMediaAttaches: Attaches[] = []
 
   for (const attach of attaches) {
-    if (isMediaAttach(attach)) {
-      photoAttaches.push(attach)
+    if (attach._type === "PHOTO") {
+      photoAttaches.push(attach as MediaAttach)
     }
     else if (attach._type === "VIDEO" && !attach.videoId) {
       downloadableMediaAttaches.push(attach)
@@ -256,7 +253,13 @@ async function sendMessageToTelegram(message: StalledMessage, to: TelegramForwar
   for (let photoIndex = 0; photoIndex < photoAttaches.length; photoIndex += MAX_MEDIA_PER_GROUP) {
     const chunk = photoAttaches.slice(photoIndex, photoIndex + MAX_MEDIA_PER_GROUP)
     const chunkCaption = photoIndex === 0 ? caption : undefined
-    await sendMediaGroupToTelegram(chunk, to, chunkCaption)
+    if (caption.text.length < TELEGRAM_CAPTION_LIMIT) {
+      await sendMediaGroupToTelegram(chunk, to, chunkCaption)
+    }
+    else {
+      await sendMediaGroupToTelegram(chunk, to)
+      await sendTextToTelegram(message, to)
+    }
   }
 
   for (const attach of downloadableMediaAttaches) {
