@@ -28,6 +28,7 @@ export default [
         },
       ],
       "camelcase": "off",
+      "class-methods-use-this": "off",
       "func-style": ["error", "declaration"],
       "no-await-in-loop": "off",
       "no-case-declarations": "off",
