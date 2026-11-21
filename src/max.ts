@@ -72,7 +72,7 @@ export class MaxWebSocketClient implements MaxWebSocketClientInterface {
   async init() {
     console.info("Initializing WebSocket client")
     await this.recordInit()
-    this.ws = new WebSocket(this.config.debug.websocketUrl ?? "wss://api.oneme.ru/websocket", {
+    this.ws = new WebSocket(this.config.debug?.websocketUrl ?? "wss://api.oneme.ru/websocket", {
       headers: {
         "Origin": "https://web.max.ru",
         "Sec-Fetch-Mode": "websocket",
@@ -120,7 +120,7 @@ export class MaxWebSocketClient implements MaxWebSocketClientInterface {
   onCloseListener() {
     console.warn("WebSocket closed")
     this.cleanup()
-    if (this.config.debug.exitOnFailure) {
+    if (this.config.debug?.exitOnFailure) {
       process.exit(1)
     }
     this.init().catch(console.error)

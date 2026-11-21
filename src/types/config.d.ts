@@ -18,7 +18,8 @@ export default interface Config {
   maxToken?: LoginInput["token"]
   deviceId?: HandshakeInput["deviceId"]
   forward: ForwardOption[]
-  debug: Partial<DebugOptions>
+  // eslint-disable-next-line @stylistic/member-delimiter-style
+  debug: Partial<DebugOptions>?;
   adminNotifications: TelegramForwardOption?
 }
 
