@@ -1,9 +1,11 @@
 import type { allOpcodes, InputsMap } from "./max/opcodes"
 import type { Attaches, IncomingMessageOutput } from "./max/opcodes/IncomingMessage"
 
-export type NextMessageOutput = NextMessageOutputItem<typeof allOpcodes[number]>[]
+export type AnyMessageOutputItem = MessageOutputItem<typeof allOpcodes[number]>
 
-export interface NextMessageOutputItem<O extends typeof allOpcodes[number]> {
+export type MessageOutput = AnyMessageOutputItem[]
+
+export interface MessageOutputItem<O extends typeof allOpcodes[number]> {
   payload: InputsMap[O]
   opcode: O
   originalOpcode: typeof allOpcodes[number]

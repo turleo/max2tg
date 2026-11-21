@@ -1,15 +1,16 @@
 import { randomUUIDv7 } from "bun"
 import { ERROR_CODE_ECONNRESET, FAILURE_ALERT_THRESHOLD, FAILURE_WINDOW_MS, HEARTBEAT_INTERVAL } from "./consts"
+import encoder from "./max/encoder"
 import { sendAlertToTelegram } from "./telegram/messages"
 import type Config from "./types/config"
 import type Message from "./types/max/Message"
 import { allOpcodes, OPCODE_HANDSHAKE, OPCODE_HEARTBEAT, OPCODE_NOOP } from "./types/max/opcodes/opcodes"
-import type { NextMessageOutput } from "./types/messages"
+import type { MessageOutput } from "./types/messages"
 
 export interface MaxWebSocketClientInterface {
-  queue: NextMessageOutput
+  queue: MessageOutput
   config: Config
-  onNewMessage: (message: Message<typeof allOpcodes[number]>) => NextMessageOutput
+  onNewMessage: (message: Message<typeof allOpcodes[number]>) => MessageOutput
   ws: WebSocket | undefined
   heartbeatInterval: NodeJS.Timeout | undefined
   previousInit: number
@@ -22,7 +23,7 @@ function onErrorListener(event: Event) {
 }
 
 export class MaxWebSocketClient implements MaxWebSocketClientInterface {
-  queue: NextMessageOutput = []
+  queue: MessageOutput = []
   previousInit = Date.now()
   initsInRaw = 0
 
@@ -51,15 +52,27 @@ export class MaxWebSocketClient implements MaxWebSocketClientInterface {
     }
   }
 
-  constructor(config: Config, onNewMessage: (message: Message<typeof allOpcodes[number]>) => NextMessageOutput) {
+  constructor(config: Config, onNewMessage: (message: Message<typeof allOpcodes[number]>) => MessageOutput) {
     this.onNewMessage = onNewMessage
     this.config = config
+  }
+
+  addWebsocketListeners() {
+    if (this.ws === undefined) {
+      throw new Error("unreachable")
+    }
+    this.ws.addEventListener("message", (event: Bun.BunMessageEvent<ArrayBuffer>) => {
+      this.onMessageListener(event)
+    })
+    this.ws.addEventListener("error", onErrorListener)
+    this.ws.addEventListener("close", this.onCloseListener.bind(this))
+    this.ws.addEventListener("open", this.flushQueue.bind(this))
   }
 
   async init() {
     console.info("Initializing WebSocket client")
     await this.recordInit()
-    this.ws = new WebSocket("wss://ws-api.oneme.ru/websocket", {
+    this.ws = new WebSocket(this.config.debug.websocketUrl ?? "wss://api.oneme.ru/websocket", {
       headers: {
         "Origin": "https://web.max.ru",
         "Sec-Fetch-Mode": "websocket",
@@ -67,19 +80,17 @@ export class MaxWebSocketClient implements MaxWebSocketClientInterface {
         "User-Agent": this.config.userAgent.headerUserAgent,
       },
     })
+    this.addWebsocketListeners()
+    this.ws.binaryType = "arraybuffer"
     this.heartbeatInterval = setInterval(() => {
-      this.ws?.send(JSON.stringify({
-        cmd: 0,
+      this.queue.push({
         opcode: OPCODE_HEARTBEAT,
+        originalOpcode: OPCODE_NOOP,
         payload: { interactive: false },
         seq: 0,
-        ver: 11,
-      }))
+      })
     }, HEARTBEAT_INTERVAL)
     console.info("WebSocket client initialized")
-    this.ws.addEventListener("message", (event) => {
-      this.onMessageListener(event)
-    })
     this.queue.push(
       {
         opcode: OPCODE_HANDSHAKE,
@@ -91,30 +102,27 @@ export class MaxWebSocketClient implements MaxWebSocketClientInterface {
         seq: 0,
       },
     )
-    this.ws.addEventListener("error", onErrorListener)
-    this.ws.addEventListener("close", () => {
-      this.onCloseListener()
-    })
-    this.ws.addEventListener("open", () => {
-      this.flushQueue()
-    })
   }
 
-  onMessageListener(event: Bun.BunMessageEvent) {
+  onMessageListener(event: Bun.BunMessageEvent<ArrayBuffer>) {
     try {
-      const incomingMessage = JSON.parse(event.data as string) as Message<typeof allOpcodes[number]>
+      const incomingMessage = encoder.fromBinary(event.data)
       const messages = this.onNewMessage(incomingMessage)
       this.queue = this.queue.concat(messages)
       this.flushQueue()
     }
     catch (err) {
-      console.error(`Failed to process WebSocket message: ${err instanceof Error ? err.message : String(err)}`)
+      console.error("Failed to process WebSocket message")
+      console.trace(err)
     }
   }
 
   onCloseListener() {
     console.warn("WebSocket closed")
     this.cleanup()
+    if (this.config.debug.exitOnFailure) {
+      process.exit(1)
+    }
     this.init().catch(console.error)
   }
 
@@ -124,7 +132,7 @@ export class MaxWebSocketClient implements MaxWebSocketClientInterface {
     if (!item) {
       return
     }
-    const { opcode, originalOpcode, payload, seq } = item
+    const { opcode, originalOpcode } = item
     if (opcode === OPCODE_NOOP) {
       return
     }
@@ -132,15 +140,9 @@ export class MaxWebSocketClient implements MaxWebSocketClientInterface {
     if (originalOpcode === opcode) {
       cmd = 1
     }
-    const message = {
-      cmd,
-      opcode,
-      payload,
-      seq,
-      ver: 11,
-    }
+    const message = encoder.toBinary(item, cmd)
     try {
-      this.ws?.send(JSON.stringify(message))
+      this.ws?.send(message)
       this.flushQueue()
     }
     catch (err) {
@@ -151,7 +153,7 @@ export class MaxWebSocketClient implements MaxWebSocketClientInterface {
   }
 
   config: Config
-  onNewMessage: (message: Message<(typeof allOpcodes)[number]>) => NextMessageOutput
+  onNewMessage: (message: Message<(typeof allOpcodes)[number]>) => MessageOutput
   ws: WebSocket | undefined
   heartbeatInterval: NodeJS.Timeout | undefined
 };

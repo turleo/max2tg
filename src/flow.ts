@@ -10,7 +10,7 @@ import type { Attaches, IncomingMessageOutput } from "./types/max/opcodes/Incomi
 import type { Chat, LoginOutput } from "./types/max/opcodes/Login"
 import { OPCODE_CHAT_UPDATE, OPCODE_CLIENT_INFO, OPCODE_DOWNLOAD_DOCUMENT, OPCODE_DOWNLOAD_VIDEO, OPCODE_HANDSHAKE, OPCODE_HEARTBEAT, OPCODE_INCOMING_MESSAGE, OPCODE_LOGIN, OPCODE_NOOP, OPCODE_PRESENCE_UPDATE, OPCODE_USER_INFO } from "./types/max/opcodes/opcodes"
 import type { UserInfoOutput } from "./types/max/opcodes/UserInfo"
-import type { NextMessageOutput, NextMessageOutputItem, StalledMessage } from "./types/messages"
+import type { MessageOutput, MessageOutputItem, StalledMessage } from "./types/messages"
 
 const contacts: Record<number, string> = {}
 const chats: Record<number, string> = {}
@@ -60,7 +60,7 @@ function logMonitoredChats(incomingChats: Chat[]): void {
   }
 }
 
-function createAuthMessage(): NextMessageOutputItem<typeof OPCODE_LOGIN> {
+function createAuthMessage(): MessageOutputItem<typeof OPCODE_LOGIN> {
   if (!config.maxToken) {
     throw new Error("Max token is not set")
   }
@@ -80,9 +80,9 @@ function createAuthMessage(): NextMessageOutputItem<typeof OPCODE_LOGIN> {
   }
 }
 
-function downloadAttachments(message: IncomingMessageOutput["message"], chatId: number, seq: number): NextMessageOutput {
+function downloadAttachments(message: IncomingMessageOutput["message"], chatId: number, seq: number): MessageOutput {
   const attachments: Attaches[] = [...message.attaches, ...(message.link?.message.attaches ?? [])]
-  const answer: NextMessageOutput = []
+  const answer: MessageOutput = []
   for (const attachment of attachments) {
     if (attachment._type === "VIDEO") {
       answer.push({
@@ -129,7 +129,7 @@ function unwrapMessage(message: IncomingMessageOutput["message"], chatId: number
 }
 
 // eslint-disable-next-line max-statements
-export function nextMessage<O extends typeof allOpcodes[number]>(message: Message<O>): NextMessageOutput {
+export function nextMessage<O extends typeof allOpcodes[number]>(message: Message<O>): MessageOutput {
   // eslint-disable-next-line prefer-destructuring
   const payload: OutputsMap[O] = message.payload
   switch (message.opcode) {
@@ -137,7 +137,7 @@ export function nextMessage<O extends typeof allOpcodes[number]>(message: Messag
       return [createAuthMessage()]
     case OPCODE_INCOMING_MESSAGE:
       const { message: incomingMessage } = payload as IncomingMessageOutput
-      let answer: NextMessageOutput = [{
+      let answer: MessageOutput = [{
         opcode: OPCODE_INCOMING_MESSAGE,
         originalOpcode: OPCODE_INCOMING_MESSAGE,
         payload: {

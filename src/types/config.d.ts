@@ -18,10 +18,16 @@ export default interface Config {
   maxToken?: LoginInput["token"]
   deviceId?: HandshakeInput["deviceId"]
   forward: ForwardOption[]
-  adminNotifictions: TelegramForwardOption?
+  debug: Partial<DebugOptions>
+  adminNotifications: TelegramForwardOption?
 }
 
 interface ForwardOption {
   from?: MaxChatId
   to: TelegramForwardOption
+}
+
+interface DebugOptions {
+  websocketUrl: string
+  exitOnFailure: boolean
 }

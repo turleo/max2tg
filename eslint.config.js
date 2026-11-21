@@ -31,6 +31,7 @@ export default [
       "class-methods-use-this": "off",
       "func-style": ["error", "declaration"],
       "no-await-in-loop": "off",
+      "no-bitwise": "off",
       "no-case-declarations": "off",
       "no-console": ["error", { allow: ["warn", "error", "info", "trace"] }],
       "no-magic-numbers": ["error", { ignore: [0, 1], ignoreArrayIndexes: true }],

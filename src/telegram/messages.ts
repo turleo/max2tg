@@ -36,7 +36,7 @@ async function postTelegramForm(action: string, endpoint: string, formData: Form
 }
 
 export async function sendAlertToTelegram(text: string): Promise<void> {
-  const to = config.adminNotifictions
+  const to = config.adminNotifications
   if (to === null) {
     console.error(text)
     return
