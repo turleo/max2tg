@@ -6,6 +6,7 @@ import type Config from "./types/config"
 import type Message from "./types/max/Message"
 import { allOpcodes, OPCODE_HANDSHAKE, OPCODE_HEARTBEAT, OPCODE_NOOP } from "./types/max/opcodes/opcodes"
 import type { MessageOutput } from "./types/messages"
+import { MessageDirection, WsLogger } from "./wsLogger"
 
 export interface MaxWebSocketClientInterface {
   queue: MessageOutput
@@ -26,6 +27,7 @@ export class MaxWebSocketClient implements MaxWebSocketClientInterface {
   queue: MessageOutput = []
   previousInit = Date.now()
   initsInRaw = 0
+  logger: WsLogger | undefined
 
   async recordInit(): Promise<void> {
     if (this.initsInRaw > FAILURE_ALERT_THRESHOLD) {
@@ -72,6 +74,7 @@ export class MaxWebSocketClient implements MaxWebSocketClientInterface {
   async init() {
     console.info("Initializing WebSocket client")
     await this.recordInit()
+    this.logger = new WsLogger(this.config)
     this.ws = new WebSocket(this.config.debug?.websocketUrl ?? "wss://api.oneme.ru/websocket", {
       headers: {
         "Origin": "https://web.max.ru",
@@ -108,6 +111,9 @@ export class MaxWebSocketClient implements MaxWebSocketClientInterface {
     try {
       const incomingMessage = encoder.fromBinary(event.data)
       const messages = this.onNewMessage(incomingMessage)
+      if (this.config.debug?.logWsMessages) {
+        this.logger?.write(incomingMessage.opcode, incomingMessage.payload, MessageDirection.Incoming)
+      }
       this.queue = this.queue.concat(messages)
       this.flushQueue()
     }
@@ -139,6 +145,9 @@ export class MaxWebSocketClient implements MaxWebSocketClientInterface {
     let cmd = 0
     if (originalOpcode === opcode) {
       cmd = 1
+    }
+    if (this.config.debug?.logWsMessages) {
+      this.logger?.write(opcode, item.payload, MessageDirection.Outgoing)
     }
     const message = encoder.toBinary(item, cmd)
     try {

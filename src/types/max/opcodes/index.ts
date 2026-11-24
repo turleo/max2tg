@@ -51,3 +51,4 @@ export interface OutputsMap {
 }
 
 export const { allOpcodes } = opcodes
+export type allOpcodesType = typeof allOpcodes[number]

@@ -31,4 +31,5 @@ interface ForwardOption {
 interface DebugOptions {
   websocketUrl: string
   exitOnFailure: boolean
+  logWsMessages: boolean
 }
